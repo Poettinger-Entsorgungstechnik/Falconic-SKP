@@ -867,7 +867,7 @@ namespace ConnectionService
             return false;
         }
 
-        async Task SendMail(string message, ArrayList recipients)
+        async Task SendMail(string message, string subject, ArrayList recipients)
         {
             try
             {
@@ -889,7 +889,7 @@ namespace ConnectionService
 //                   .Property(Send.FromEmail, "elch@aon.at")
                    .Property(Send.FromEmail, "falconic@poettinger.at")
                    .Property(Send.FromName, "FALCONIC")
-                   .Property(Send.Subject, "Container Alerting")
+                   .Property(Send.Subject, subject)
                    .Property(Send.TextPart, message)
                     //               .Property(Send.HtmlPart, "<h3>Dear passenger, welcome to Mailjet!</h3><br />May the delivery force be with you!")
                     //.Property(Send.Recipients, new JArray {
@@ -991,6 +991,7 @@ namespace ConnectionService
                         smsMessage += "Location: " + _location.Name + "\n";
 
                         String emailMessage = smsMessage;
+                        String subject = _container.IdentString + "_" + message + "_" + _location.MaterialName;
                         emailMessage += "Typ: " + _container.ContainerType + "\n";
 
                         double lat = (double)_location.Latitude;
@@ -1038,7 +1039,7 @@ namespace ConnectionService
 
                                 users1.Add(alertUser);
 
-                                SendMail(emailMessage, users1).Wait();
+                                SendMail(emailMessage, subject, users1).Wait();
                             }
                         }
                     }
