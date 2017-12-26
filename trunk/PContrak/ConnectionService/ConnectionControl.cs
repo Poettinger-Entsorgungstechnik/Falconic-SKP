@@ -25,11 +25,18 @@ namespace ConnectionService
     [Serializable]
     public class ConnectionControl : MarshalByRefObject
     {
+        #region constants
+
+        public const string DB_CONNECTION_STRING = "Data Source=172.22.103.8;Initial Catalog=WIP;Pooling=True;Persist Security Info=False;User Id=sa;Password=Ikopsql01";
+
+        #endregion
+
         #region Members
 
         private ArrayList _clients = new ArrayList(100);	        // list of actual connected clients, allow 100 clients as default, can be increased
-
         private Mutex _emailMutex = new Mutex();
+        private DateTime _tLastLocationCheck = DateTime.Now.Subtract(new TimeSpan(0,1,0,0,0));
+        private Hashtable _lastMonitoringMessage = new Hashtable();
 
         #endregion
 
@@ -66,6 +73,116 @@ namespace ConnectionService
 
         #endregion
 
+        #region static methods
+
+        public static async Task SendMail(string message, string subject, ArrayList recipients)
+        {
+            try
+            {
+                //                MailjetClient client = new MailjetClient("f45a3bcc36c321165eeeb8061abc1fcf", "0feec0515e1669c976034c6f6dcfc887");
+                MailjetClient client = new MailjetClient("c0719838f86777631495b01e3d9fb47f", "83cfc1e5f8c84cb2a549f2e9c386c3fc");
+                JArray jRecepients = new JArray();
+
+                for (int i = 0; i < recipients.Count; i++)
+                {
+                    AlertingUser user = (AlertingUser)recipients[i];
+
+                    jRecepients.Add(new JObject { { "Email", user.EmailAddress } });
+                }
+
+                MailjetRequest request = new MailjetRequest
+                {
+                    Resource = Send.Resource,
+                }
+                   //                   .Property(Send.FromEmail, "elch@aon.at")
+                   .Property(Send.FromEmail, "falconic@poettinger.at")
+                   .Property(Send.FromName, "FALCONIC")
+                   .Property(Send.Subject, subject)
+                   .Property(Send.TextPart, message)
+                    //               .Property(Send.HtmlPart, "<h3>Dear passenger, welcome to Mailjet!</h3><br />May the delivery force be with you!")
+                    //.Property(Send.Recipients, new JArray {
+                    //    new JObject {
+                    //        {"Email", "andreas.erler@ocilion.com"}
+                    //        }
+                    //    });
+
+                    .Property(Send.Recipients, jRecepients);
+
+                MailjetResponse response = await client.PostAsync(request);
+                if (response.IsSuccessStatusCode)
+                {
+                    LogFile.WriteMessageToLogFile("Total: {0}, Count: {1}\n", response.GetTotal(), response.GetCount());
+                }
+                else
+                {
+                    LogFile.WriteErrorToLogFile("StatusCode: {0}\n", response.StatusCode);
+                    LogFile.WriteErrorToLogFile("ErrorInfo: {0}\n", response.GetErrorInfo());
+                    LogFile.WriteErrorToLogFile("ErrorMessage: {0}\n", response.GetErrorMessage());
+                }
+            }
+            catch (Exception excp)
+            {
+                LogFile.WriteErrorToLogFile(excp.Message);
+            }
+        }
+
+        public static void DoAlerting(int locationId, uint type, string smsMessage, string emailMessage, string subject)
+        {
+            ArrayList users = new ArrayList();
+
+            // different lists for full messages
+            if (type == 1 || type == 2)
+            {
+                Location.GetFullContainerUsers(locationId, ref users);
+            }
+            else
+            {
+                Location.GetAlertingUsers(locationId, ref users);
+            }
+
+            for (int j = 0; j < users.Count; j++)
+            {
+                AlertingUser user = (AlertingUser)users[j];
+
+                // do sms alerting over wallner server and email alerting over MailJet
+                if ((user.Flags & (int)ALERTING_FLAGS.SMS_ENABLED) == 0x01)    // do sms alerting
+                {
+                    ArrayList users1 = new ArrayList();
+                    FieldAreaNetwork.AlertingUser alertUser = new FieldAreaNetwork.AlertingUser();
+
+                    alertUser.ClientName = "SKP";
+                    alertUser.TelephoneNumber = user.TelephoneNumber;
+                    alertUser.Flags = (int)ALERTING_FLAGS.SMS_ENABLED;
+                    alertUser.EmailAddress = "";
+                    alertUser.Name = user.Name;
+
+                    users1.Add(alertUser);
+                    LogFile.WriteMessageToLogFile("Send SMS for user: {0} to number: {1}", alertUser.Name, alertUser.TelephoneNumber);
+
+                    if (smsMessage.Length > 160)
+                        smsMessage = smsMessage.Substring(0, 160);
+
+                    FieldAreaNetwork.AlertingControl.AddAlarm("alarm.wallner-automation.com", users1, "WIP", smsMessage, false, 0);
+                }
+
+                if ((user.Flags & 0x02) == 0x02)    // do email alerting
+                {
+                    ArrayList users1 = new ArrayList();
+                    LogFile.WriteMessageToLogFile("Send Email for user: {0} to address: {1}", user.Name, user.EmailAddress);
+
+                    AlertingUser alertUser = new AlertingUser();
+                    alertUser.EmailAddress = user.EmailAddress;
+                    alertUser.Name = user.Name;
+
+                    users1.Add(alertUser);
+
+                    SendMail(emailMessage, subject, users1).Wait();
+                }
+            }
+        }
+        
+        #endregion
+        
         #region Methods
 
         public void SendEmail(string subject, string body, string contact)
@@ -93,6 +210,7 @@ namespace ConnectionService
                 _emailMutex.ReleaseMutex();
             }
         }
+
         /// <summary>
         /// Remove given client connection
         /// </summary>
@@ -115,7 +233,160 @@ namespace ConnectionService
             }
         }
 
- 
+
+        private void LocationMonitoring()
+        {
+            TimeSpan ts = DateTime.Now.Subtract(_tLastLocationCheck);
+            List<Location> locations = new List<Location>();
+
+            if (ts.TotalMinutes >= 30)
+            {
+                _tLastLocationCheck = DateTime.Now;
+
+                string sqlStatement = "SELECT * FROM LOCATION WHERE MONITORING_ACTIVE=1";
+
+                LogFile.WriteMessageToLogFile("Monitoring: Start check ...");
+
+                try
+                {
+                    using (SqlConnection sqlConnection = new SqlConnection(DB_CONNECTION_STRING))
+                    {
+                        sqlConnection.Open();
+
+                        using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
+                        {
+                            using (SqlDataReader reader = cmd.ExecuteReader())
+                            {
+                                while (reader.Read())
+                                {
+                                    DateTime dtFrom = new DateTime();
+                                    DateTime dtTo = new DateTime();
+                                    TimeSpan tsSinceStart = DateTime.Today - new DateTime(1900, 1, 1);
+                                    int duration = 0;
+                                    int containerId = 0;
+                                    int locationId = 0;
+
+                                    if (reader["MONITOR_FROM"].GetType() != typeof(System.DBNull))
+                                    {
+                                        dtFrom = (DateTime)reader["MONITOR_FROM"];
+                                        dtFrom = dtFrom.Add(tsSinceStart);
+                                    }
+
+                                    if (reader["MONITOR_TO"].GetType() != typeof(System.DBNull))
+                                    {
+                                        dtTo = (DateTime)reader["MONITOR_TO"];
+                                        dtTo = dtTo.Add(tsSinceStart);
+                                    }
+
+                                    if (reader["MONITOR_DURATION"].GetType() != typeof(System.DBNull))
+                                    {
+                                        duration = (int)reader["MONITOR_DURATION"];
+                                    }
+
+                                    if (reader["CONTAINER_ID"].GetType() != typeof(System.DBNull))
+                                    {
+                                        containerId = (int)reader["CONTAINER_ID"];
+                                    }
+
+                                    if (reader["LOCATION_ID"].GetType() != typeof(System.DBNull))
+                                    {
+                                        locationId = (int)reader["LOCATION_ID"];
+                                    }
+
+                                    if (dtTo <= dtFrom)
+                                        dtTo = dtTo.AddDays(1);
+
+                                    if (DateTime.Now >= dtFrom && DateTime.Now < dtTo)
+                                    {
+                                        // store this loaction for monitoring
+                                        Location loc = new Location();
+
+                                        loc.LocationId = locationId;
+                                        loc.WatchdogDuration = duration;
+                                        loc.Name = (string)reader["LOCATION"];
+
+                                        LogFile.WriteMessageToLogFile("Monitoring: LocationId: {0}, ContainerId: {1}, From: {2}, To: {3}, Duration: {4}", locationId, containerId,
+                                            dtFrom, dtTo, duration);
+
+                                        locations.Add(loc);
+                                    }
+                                }
+
+                                reader.Close();
+                            }
+                        }
+
+                        foreach (Location loc in locations)
+                        {
+                            sqlStatement = "SELECT TRANSACTION_ID FROM TRANSACTIONS WHERE LOCATION_ID=@LocationId AND DATE > @Date";
+
+                            using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
+                            {
+                                SqlParameter locId = new SqlParameter("@LocationId", SqlDbType.Int);
+
+                                locId.Value = loc.LocationId;
+                                cmd.Parameters.Add(locId);
+
+                                DateTime dtMin = DateTime.Now.AddMinutes(-loc.WatchdogDuration);
+                                SqlParameter minDate = new SqlParameter("@Date", SqlDbType.DateTime);
+
+                                minDate.Value = dtMin;
+                                cmd.Parameters.Add(minDate);
+
+                                LogFile.WriteMessageToLogFile("Monitoring: Check LocationId: {0}, Starttime: {1}", loc.LocationId, dtMin);
+
+                                using (SqlDataReader reader = cmd.ExecuteReader())
+                                {
+                                    if (!reader.Read())
+                                    {
+                                        // there was no transactions in specified time
+                                        // so do alerting when necessary
+                                        bool bDoAlerting = true;
+
+                                        LogFile.WriteMessageToLogFile("Monitoring: LocationId: {0}, No Transactions found", loc.LocationId);
+
+                                        if (_lastMonitoringMessage[loc.LocationId] != null)
+                                        {
+                                            TimeSpan ts1 = DateTime.Now.Subtract((DateTime)_lastMonitoringMessage[loc.LocationId]);
+
+                                            if (ts1.TotalHours < 24)
+                                            {
+                                                LogFile.WriteMessageToLogFile("Monitoring: Skip alerting since time is not right");
+                                                bDoAlerting = false;
+                                            }
+                                        }
+
+                                        if (bDoAlerting && loc.LocationId == 708)
+                                        {
+                                            string smsMessage = String.Format("{0}: Warning: No Transactions since: {1} minutes", loc.Name, loc.WatchdogDuration);
+                                            string subject = "WIP - LocationMonitoring";
+
+                                            ConnectionControl.DoAlerting(loc.LocationId, 0, smsMessage, smsMessage, subject);
+                                            _lastMonitoringMessage[loc.LocationId] = DateTime.Now;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        _lastMonitoringMessage[loc.LocationId] = null;
+                                    }
+                                }
+                            }
+                        }
+
+                        sqlConnection.Close();
+                    }
+                }
+                catch (Exception e)
+                {
+                    LogFile.WriteErrorToLogFile("{0} in \'LocationMonitoring\' appeared.", e.Message);
+                }
+
+                LogFile.WriteMessageToLogFile("Monitoring: End check ...");
+
+            }
+        }
+
+
         /// <summary>
         /// Do the service's job
         /// </summary>
@@ -154,6 +425,8 @@ namespace ConnectionService
 
                             conn.Start();
                         }
+
+                        LocationMonitoring();
 
                         Thread.Sleep(10);
 
@@ -262,6 +535,7 @@ namespace ConnectionService
         private string _deviceNumber;               // machine number
         private string _operatorName;
         private string _containerType;
+        private string _firmwareVersion;            // firmwareversion which should be installed
         private int _numberOfStoredEvents;          
 
         #endregion
@@ -272,6 +546,7 @@ namespace ConnectionService
         private string _controllerFirmwareVersion;  // controller firmware version string
         private int _ModemSignalQuality;            // controller signal quality information
         private int _actualFillingLevel;            // actual calculated filling level
+        private int _supplyVoltage;                 // actual supply voltage value (raw value)
         private DbGeography _location;              // gps coordinates where container is located
         private DateTime _tLastCommunication;       // time of last transaction
 
@@ -296,6 +571,8 @@ namespace ConnectionService
         public string OperatorName { get => _operatorName; set => _operatorName = value; }
         public string ContainerType { get => _containerType; set => _containerType = value; }
         public int ContainerTypeId { get => _containerTypeId; set => _containerTypeId = value; }
+        public string FirmwareVersion { get => _firmwareVersion; set => _firmwareVersion = value; }
+        public int SupplyVoltage { get => _supplyVoltage; set => _supplyVoltage = value; }
 
         #endregion
 
@@ -319,6 +596,7 @@ namespace ConnectionService
         private int _locationId;                    // location id
         private string _name;                       // name of location
         private string _materialName;               // name of material
+        private string _strHash;
         private int _materialId;                    // kind of material
         private int _pressStrokes;                  // number of strokes to perform in one cycle
         private bool _pressPosition;                // position where press should stop 0 ... back, 1 ... front 
@@ -326,10 +604,15 @@ namespace ConnectionService
         private int _fullErrorLevel;                // at this level full alerting will be done
         private double _latitude;                   // real coordinates from database
         private double _longitude;                  // real coordinates from database
+        private int _nightLockStart;                // begin of nightlock (minutes after midnight)
+        private int _nightLockEnd;                  // end of nightlock (minutes after midnight)
+        private int _nightLockDuration;             // minutes
+        private bool _isWatchdogActive;
+        private int _WatchdogDuration;              
 
         #endregion
 
-        #region members
+        #region properties
 
         public string Name { get => _name; set => _name = value; }
         public int MaterialId { get => _materialId; set => _materialId = value; }
@@ -341,6 +624,12 @@ namespace ConnectionService
         public double Latitude { get => _latitude; set => _latitude = value; }
         public double Longitude { get => _longitude; set => _longitude = value; }
         public string MaterialName { get => _materialName; set => _materialName = value; }
+        public string StrHash { get => _strHash; set => _strHash = value; }
+        public int NightLockStart { get => _nightLockStart; set => _nightLockStart = value; }
+        public int NightLockEnd { get => _nightLockEnd; set => _nightLockEnd = value; }
+        public int NightLockDuration { get => _nightLockDuration; set => _nightLockDuration = value; }
+        public bool IsWatchdogActive { get => _isWatchdogActive; set => _isWatchdogActive = value; }
+        public int WatchdogDuration { get => _WatchdogDuration; set => _WatchdogDuration = value; }
 
         #endregion
 
@@ -356,6 +645,128 @@ namespace ConnectionService
             LocationId = 0;
             _pressPosition = false;
         }
+        #endregion
+
+        #region static methods
+
+        public static bool GetFullContainerUsers(int location_id, ref ArrayList users)
+        {
+            string sqlStatement = "SELECT REMOTE_CONTROL.REMOTE_CONTROL_ID, REMOTE_CONTROL_TYPE_ID, MEMO, CONTACT FROM REMOTE_CONTROL INNER JOIN FULL_CONTAINER ON REMOTE_CONTROL.REMOTE_CONTROL_ID=FULL_CONTAINER.REMOTE_CONTROL_ID WHERE FULL_CONTAINER.LOCATION_ID=@LocationId";
+
+            bool retval = true;
+
+            try
+            {
+                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
+                {
+                    sqlConnection.Open();
+
+                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
+                    {
+                        SqlParameter p_locationId = new SqlParameter("@LocationId", SqlDbType.Int);
+                        p_locationId.Value = location_id;
+
+                        cmd.Parameters.Add(p_locationId);
+
+                        using (SqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                AlertingUser user = new AlertingUser();
+                                user.Id = (int)reader[0];
+                                int type = (int)reader[1];
+
+                                user.Name = (string)reader[2];
+
+                                if (type == 2)  // email
+                                {
+                                    user.Flags = (int)ALERTING_FLAGS.EMAIL_ENABLED;
+                                    user.EmailAddress = (string)reader[3];
+                                }
+                                else if (type == 3) // sms
+                                {
+                                    user.Flags = (int)ALERTING_FLAGS.SMS_ENABLED;
+                                    user.TelephoneNumber = (string)reader[3];
+                                }
+
+                                users.Add(user);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                LogFile.WriteErrorToLogFile("{0} in \'GetFullContainerUsers\' appeared.", e.Message);
+                retval = false;
+            }
+            finally
+            {
+            }
+
+            return retval;
+        }
+
+        public static bool GetAlertingUsers(int location_id, ref ArrayList users)
+        {
+            string sqlStatement = "SELECT REMOTE_CONTROL.REMOTE_CONTROL_ID, REMOTE_CONTROL_TYPE_ID, MEMO, CONTACT FROM REMOTE_CONTROL INNER JOIN ERROR ON REMOTE_CONTROL.REMOTE_CONTROL_ID=ERROR.REMOTE_CONTROL_ID WHERE ERROR.LOCATION_ID=@LocationId";
+
+            bool retval = true;
+
+            try
+            {
+                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
+                {
+                    sqlConnection.Open();
+
+                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
+                    {
+                        SqlParameter p_locationId = new SqlParameter("@LocationId", SqlDbType.Int);
+                        p_locationId.Value = location_id;
+
+                        cmd.Parameters.Add(p_locationId);
+
+                        using (SqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                AlertingUser user = new AlertingUser();
+                                user.Id = (int)reader[0];
+                                int type = (int)reader[1];
+
+                                user.Name = (string)reader[2];
+
+                                if (type == 2)  // email
+                                {
+                                    user.Flags = (int)ALERTING_FLAGS.EMAIL_ENABLED;
+                                    user.EmailAddress = (string)reader[3];
+                                }
+                                else if (type == 3) // sms
+                                {
+                                    user.Flags = (int)ALERTING_FLAGS.SMS_ENABLED;
+                                    user.TelephoneNumber = (string)reader[3];
+                                }
+
+                                users.Add(user);
+                            }
+                        }
+                    }
+
+                    sqlConnection.Close();
+                }
+            }
+            catch (Exception e)
+            {
+                LogFile.WriteErrorToLogFile("{0} in \'GetAlertingUsers\' appeared.", e.Message);
+                retval = false;
+            }
+            finally
+            {
+            }
+
+            return retval;
+        }
+
         #endregion
     }
 
@@ -394,9 +805,6 @@ namespace ConnectionService
         private Queue _serviceCommands = new Queue();                       // queue for service commands
 
         private DateTime _destTime;
-
-//        private string _DatabaseConnectionString = "Data Source=LocalHost\\PCONTRAC;Initial Catalog=CCS;Pooling=False;User Id=sa;Password=ikop";
-        private string _DatabaseConnectionString = "Data Source=172.22.103.8;Initial Catalog=WIP;Pooling=True;Persist Security Info=False;User Id=sa;Password=Ikopsql01";
 
         [NonSerialized]
         private TcpClient _tcpClient;                                       // tcp client class
@@ -544,6 +952,13 @@ namespace ConnectionService
         #endregion
 
         #region Helpers
+
+        private static readonly DateTime epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        public static DateTime FromUnixTime(long unixTime)
+        {
+            return epoch.AddSeconds(unixTime);
+        }
 
         #region AreaCode
 
@@ -867,57 +1282,6 @@ namespace ConnectionService
             return false;
         }
 
-        async Task SendMail(string message, string subject, ArrayList recipients)
-        {
-            try
-            {
-//                MailjetClient client = new MailjetClient("f45a3bcc36c321165eeeb8061abc1fcf", "0feec0515e1669c976034c6f6dcfc887");
-                MailjetClient client = new MailjetClient("c0719838f86777631495b01e3d9fb47f", "83cfc1e5f8c84cb2a549f2e9c386c3fc");
-                JArray jRecepients = new JArray();
-
-                for (int i = 0; i < recipients.Count; i++)
-                {
-                    AlertingUser user = (AlertingUser)recipients[i];
-
-                    jRecepients.Add(new JObject { { "Email", user.EmailAddress } });
-                }
-
-                MailjetRequest request = new MailjetRequest
-                {
-                    Resource = Send.Resource,
-                }
-//                   .Property(Send.FromEmail, "elch@aon.at")
-                   .Property(Send.FromEmail, "falconic@poettinger.at")
-                   .Property(Send.FromName, "FALCONIC")
-                   .Property(Send.Subject, subject)
-                   .Property(Send.TextPart, message)
-                    //               .Property(Send.HtmlPart, "<h3>Dear passenger, welcome to Mailjet!</h3><br />May the delivery force be with you!")
-                    //.Property(Send.Recipients, new JArray {
-                    //    new JObject {
-                    //        {"Email", "andreas.erler@ocilion.com"}
-                    //        }
-                    //    });
-
-                    .Property(Send.Recipients, jRecepients);
-
-                MailjetResponse response = await client.PostAsync(request);
-                if (response.IsSuccessStatusCode)
-                {
-                    LogFile.WriteMessageToLogFile("Total: {0}, Count: {1}\n", response.GetTotal(), response.GetCount());
-                }
-                else
-                {
-                    LogFile.WriteErrorToLogFile("StatusCode: {0}\n", response.StatusCode);
-                    LogFile.WriteErrorToLogFile("ErrorInfo: {0}\n", response.GetErrorInfo());
-                    LogFile.WriteErrorToLogFile("ErrorMessage: {0}\n", response.GetErrorMessage());
-                }
-            }
-            catch (Exception excp)
-            {
-                LogFile.WriteErrorToLogFile(excp.Message);
-            }
-        }
-
         private string ByteArrayToString(byte[] arrInput)
         {
             int i;
@@ -942,11 +1306,6 @@ namespace ConnectionService
                 {
                     int numberOfEvents = (toks.Length - 1) / 2;
 
-                    byte[] tmpHash = new MD5CryptoServiceProvider().ComputeHash(ASCIIEncoding.ASCII.GetBytes(_location.Name));
-                    string strHash = ByteArrayToString(tmpHash).Substring(0, 8);
-
-                    SetMapviewHash(strHash, DateTime.Now.AddHours(10));
-
                     LogFile.WriteMessageToLogFile("Read ({0}) events: {1}", numberOfEvents, frame);
 
                     for (int i = 0; i < numberOfEvents; i++)
@@ -956,90 +1315,63 @@ namespace ConnectionService
 
                         LogFile.WriteMessageToLogFile("Event with type: {0} and time: {1}", type, time);
 
-                        string message = "Meldung: ";
-                        
-                        if (type == 0)  // Power On Event
+                        if (type < 256) // Event with alerting enabled
                         {
-                            message += "HAUPTSCHALTER EIN";
-                        }
-                        else if (type == 1) // Nearly full Event
-                        {
-                            message += "VOR VOLL" + String.Format("({0}) %", _container.ActualFillingLevel);
-                        }
-                        else if (type == 2) // Full Event
-                        {
-                            message += "VOLL";
-                        }
-                        else if (type == 3) // Emergency stop
-                        {
-                            message += "NOTHALT";
-                        }
-                        else if (type == 4) // Motorschutz
-                        {
-                            message += "MOTORSCHUTZ";
-                        }
-                        else if (type == 5) // Störung
-                        {
-                            message += "STOERUNG";
-                        }
 
-                        String smsMessage = "\nIdent Nr.: " + _container.IdentString + "\n";
-                        smsMessage += message + "\n";
-                        smsMessage += "Fraktion: " + _location.MaterialName + "\n";
-                        smsMessage += "SerialNr: " + _container.DeviceNumber + "\n";
-                        smsMessage += "Betreiber: " + _container.OperatorName + "\n";
-                        smsMessage += "Location: " + _location.Name + "\n";
+                            string message = "Meldung: ";
 
-                        String emailMessage = smsMessage;
-                        String subject = _container.IdentString + "_" + message + "_" + _location.MaterialName;
-                        emailMessage += "Typ: " + _container.ContainerType + "\n";
-
-                        double lat = (double)_location.Latitude;
-                        double lng = (double)_location.Longitude;
-
-                        emailMessage += "https://www.entsorgungstechnik.com/Standorte/Infomap?locationid=" + _location.LocationId.ToString() + "&code=";
-                        emailMessage += strHash + "\n";
-
-                        LogFile.WriteMessageToLogFile("Alertingmessage: {0}", emailMessage);
-
-                        ArrayList users = new ArrayList();
-
-                        GetAlertingUsers(_location.LocationId, ref users);
-
-                        for (int j = 0; j < users.Count; j++)
-                        {
-                            AlertingUser user = (AlertingUser)users[j];
-
-                            // do sms alerting over wallner server and email alerting over MailJet
-                            if ((user.Flags & (int)ALERTING_FLAGS.SMS_ENABLED) == 0x01)    // do sms alerting
+                            if (type == 0)  // Power On Event
                             {
-                                ArrayList users1 = new ArrayList();
-                                FieldAreaNetwork.AlertingUser alertUser = new FieldAreaNetwork.AlertingUser();
-
-                                alertUser.ClientName = "SKP";
-                                alertUser.TelephoneNumber = user.TelephoneNumber;
-                                alertUser.Flags = (int)ALERTING_FLAGS.SMS_ENABLED;
-                                alertUser.EmailAddress = "";
-                                alertUser.Name = user.Name;
-
-                                users1.Add(alertUser);
-
-                                LogFile.WriteMessageToLogFile("Send SMS for user: {0} to number: {1}", alertUser.Name, alertUser.TelephoneNumber);
-
-                                FieldAreaNetwork.AlertingControl.AddAlarm("alarm.wallner-automation.com", users1, "WIP", smsMessage, false, 0);
+                                message += "HAUPTSCHALTER EIN";
                             }
-                            if ((user.Flags & 0x02) == 0x02)    // do email alerting
+                            else if (type == 1) // Nearly full Event
                             {
-                                ArrayList users1 = new ArrayList();
-                                LogFile.WriteMessageToLogFile("Send Email for user: {0} to address: {1}", user.Name, user.EmailAddress);
+                                message += "VOR VOLL" + String.Format("({0}) %", _container.ActualFillingLevel);
+                            }
+                            else if (type == 2) // Full Event
+                            {
+                                message += "VOLL";
+                            }
+                            else if (type == 3) // Emergency stop
+                            {
+                                message += "NOTHALT";
+                            }
+                            else if (type == 4) // Motorschutz
+                            {
+                                message += "MOTORSCHUTZ";
+                            }
+                            else if (type == 5) // Störung
+                            {
+                                message += "STOERUNG";
+                            }
 
-                                AlertingUser alertUser = new AlertingUser();
-                                alertUser.EmailAddress = user.EmailAddress;
-                                alertUser.Name = user.Name;
+                            String smsMessage = "\nIdent Nr.: " + _container.IdentString + "\n";
+                            smsMessage += message + "\n";
+                            smsMessage += "Fraktion: " + _location.MaterialName + "\n";
+                            //                        smsMessage += "SerialNr: " + _container.DeviceNumber + "\n";
+                            smsMessage += "Betreiber: " + _container.OperatorName + "\n";
+                            smsMessage += "Location: " + _location.Name + "\n";
 
-                                users1.Add(alertUser);
+                            String emailMessage = smsMessage;
+                            String subject = _container.IdentString + "_" + message + "_" + _location.MaterialName;
+                            emailMessage += "SerialNr: " + _container.DeviceNumber + "\n";
+                            emailMessage += "Typ: " + _container.ContainerType + "\n";
 
-                                SendMail(emailMessage, subject, users1).Wait();
+                            double lat = (double)_location.Latitude;
+                            double lng = (double)_location.Longitude;
+
+                            emailMessage += "https://www.entsorgungstechnik.com/Standorte/Infomap?locationid=" + _location.LocationId.ToString() + "&code=";
+                            emailMessage += _location.StrHash + "\n";
+
+                            LogFile.WriteMessageToLogFile("Alertingmessage: {0}", emailMessage);
+
+                            ConnectionControl.DoAlerting(_location.LocationId, type, smsMessage, emailMessage, subject);
+                        }
+                        else  // Non error event
+                        {
+                            if (type == 256)    // TRANSACTION_OK
+                            {
+                                StoreTransaction(_container.ContainerId, FromUnixTime(time));
                             }
                         }
                     }
@@ -1181,15 +1513,219 @@ namespace ConnectionService
 
         #region Database methods
 
-        private bool SetMapviewHash(string strHash, DateTime dueDate)
+        public bool StoreTransaction(int containerId, DateTime date)
         {
-            bool retval = false;
-
-            LogFile.WriteMessageToLogFile("Set mapview hast to: ({0}), DueDate: ({1})", strHash, dueDate);
+            bool retval = true;
+            int lastTransId = 0;
 
             try
             {
-                using (SqlConnection sqlConnection = new SqlConnection(_DatabaseConnectionString))
+                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
+                {
+                    sqlConnection.Open();
+
+                    // first get max transaction id
+                    string sqlStatement = "SELECT MAX(TRANSACTION_ID) AS MAX_TRANSACTION_ID FROM TRANSACTIONS";
+
+                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
+                    {
+                        using (SqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            if (reader.Read())
+                            {
+                                lastTransId = (int)reader[0];
+                            }
+                        }
+                    }
+
+                    // store transactions in database
+                    sqlStatement = "INSERT INTO TRANSACTIONS ([TRANSACTION_ID], [CUSTOMER_ID], [TRANSACTION_STATUS_ID], [LOCATION_ID], [DATE], [WEIGHT], [DURATION], [AMOUNT], [CONTAINER_ID], [GSM_NUMBER], [POSITIVE_CREDIT_BALANCE]) VALUES (@TransactionId, @CustomerId, @TransactionStatusId, @LocationId, @Date, @Weight, @Duration, @Amount, @ContainerId, @GSMNumber, @PositiveCreditBalance)";
+                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
+                    {
+                        SqlParameter p_transId = new SqlParameter("@TransactionId", SqlDbType.Int);
+                        p_transId.Value = ++lastTransId;
+                        cmd.Parameters.Add(p_transId);
+
+                        SqlParameter p_customerId = new SqlParameter("@CustomerId", SqlDbType.Int);
+                        p_customerId.Value = 1001;
+                        cmd.Parameters.Add(p_customerId);
+
+                        SqlParameter p_transactionStatusId = new SqlParameter("@TransactionStatusId", SqlDbType.Int);
+                        p_transactionStatusId.Value = 1;
+                        cmd.Parameters.Add(p_transactionStatusId);
+
+                        SqlParameter p_locationId = new SqlParameter("@LocationId", SqlDbType.Int);
+                        p_locationId.Value = this._location.LocationId;
+                        cmd.Parameters.Add(p_locationId);
+
+                        SqlParameter p_date = new SqlParameter("@Date", SqlDbType.DateTime);
+                        p_date.Value = date;
+                        cmd.Parameters.Add(p_date);
+
+                        SqlParameter p_weight = new SqlParameter("@Weight", SqlDbType.Int);
+                        p_weight.Value = 10;
+                        cmd.Parameters.Add(p_weight);
+
+                        SqlParameter p_duration = new SqlParameter("@Duration", SqlDbType.Int);
+                        p_duration.Value = 5;
+                        cmd.Parameters.Add(p_duration);
+
+                        SqlParameter p_amount = new SqlParameter("@Amount", SqlDbType.Int);
+                        p_amount.Value = 0;
+                        cmd.Parameters.Add(p_amount);
+
+                        SqlParameter p_containerId = new SqlParameter("@ContainerId", SqlDbType.Int);
+                        p_containerId.Value = containerId;
+                        cmd.Parameters.Add(p_containerId);
+
+                        SqlParameter p_gsmNumber = new SqlParameter("@GSMNumber", SqlDbType.VarChar);
+                        p_gsmNumber.Value = "-";
+                        cmd.Parameters.Add(p_gsmNumber);
+
+                        SqlParameter p_positiveCreditBalance = new SqlParameter("@PositiveCreditBalance", SqlDbType.Int);
+                        p_positiveCreditBalance.Value = 0;
+                        cmd.Parameters.Add(p_positiveCreditBalance);
+
+                        // store it
+                        if (cmd.ExecuteNonQuery() != 1)
+                        {
+                            LogFile.WriteErrorToLogFile("Error while excuting sql statement: {0}", sqlStatement);
+                            retval = false;
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                LogFile.WriteErrorToLogFile("Exception: {0} in \'StoreTransaction\' appeared.", e.Message);
+                retval = false;
+            }
+            finally
+            {
+            }
+
+            return retval;
+        }
+
+        public bool RemoveContainerFromLocations(int container_id)
+        {
+            string sqlStatement = "SELECT LOCATION_ID FROM LOCATION WHERE CONTAINER_ID=@ContainerId";
+            List<int> locations = new List<int>();
+            bool retval = true;
+
+            try
+            {
+                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
+                {
+                    sqlConnection.Open();
+
+                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
+                    {
+                        SqlParameter p_containerId = new SqlParameter("@ContainerId", SqlDbType.Int);
+                        p_containerId.Value = container_id;
+                        cmd.Parameters.Add(p_containerId);
+
+                        using (SqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                int locId = (int)reader[0];
+
+                                LogFile.WriteMessageToLogFile("{0} Found ContainerId ({1}) on Location ({2})", this.Name, container_id, locId);
+                                locations.Add(locId);
+                            }
+
+                            reader.Close();
+                        }
+                    }
+
+                    foreach (int loc in locations)
+                    {
+                        using (SqlCommand cmd = new SqlCommand("UPDATE LOCATION SET CONTAINER_ID=@ContainerId WHERE LOCATION_ID=@LocationId", sqlConnection))
+                        {
+                            SqlParameter p_containerId = new SqlParameter("@ContainerId", SqlDbType.Int);
+                            p_containerId.Value = 0;
+                            cmd.Parameters.Add(p_containerId);
+
+                            SqlParameter p_locationId = new SqlParameter("@LocationId", SqlDbType.Int);
+                            p_locationId.Value = loc;
+                            cmd.Parameters.Add(p_locationId);
+
+                            if (cmd.ExecuteNonQuery() != 1)
+                            {
+                                LogFile.WriteErrorToLogFile("{0} Error while trying reset container id ({1}) on location ({2})", this.Name, container_id, loc);
+                                retval = false;
+                            }
+                        }
+                    }
+
+                    sqlConnection.Close();
+                }
+            }
+            catch (Exception e)
+            {
+                LogFile.WriteErrorToLogFile("Exception: {0} in \'RemoveContainerFromLocations\' appeared.", e.Message);
+                retval = false;
+            }
+            finally
+            {
+            }
+
+            return retval;
+        }
+
+        public bool UpdateContainerLastCommunication(int container_id, DateTime date)
+        {
+            string sqlStatement = "UPDATE CONTAINER SET LAST_COMMUNICATION = @LastCommunication WHERE CONTAINER_ID=@ContainerId";
+            bool retval = true;
+
+            try
+            {
+                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
+                {
+                    sqlConnection.Open();
+
+                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
+                    {
+                        SqlParameter p_lastCommunication = new SqlParameter("@LastCommunication", SqlDbType.DateTime);
+                        p_lastCommunication.Value = date;
+                        cmd.Parameters.Add(p_lastCommunication);
+
+                        SqlParameter p_containerId = new SqlParameter("@ContainerId", SqlDbType.Int);
+                        p_containerId.Value = container_id;
+                        cmd.Parameters.Add(p_containerId);
+
+                        if (cmd.ExecuteNonQuery() != 1)
+                        {
+                            LogFile.WriteErrorToLogFile("Error while trying to store last communication date for container (id={0})", container_id);
+                            retval = false;
+                        }
+                    }
+
+                    sqlConnection.Close();
+                }
+            }
+            catch (Exception e)
+            {
+                LogFile.WriteErrorToLogFile("Exception: {0} in \'UpdateContainerLastCommunication\' appeared.", e.Message);
+                retval = false;
+            }
+            finally
+            {
+            }
+
+            return retval;
+        }
+
+        private bool SetMapviewHash(DateTime dueDate)
+        {
+            bool retval = false;
+
+            LogFile.WriteMessageToLogFile("Set mapview hash to: ({0}), DueDate: ({1})", _location.StrHash, dueDate);
+
+            try
+            {
+                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
                 {
                     sqlConnection.Open();
 
@@ -1199,7 +1735,7 @@ namespace ConnectionService
                         iContainerId.Value = _container.ContainerId;
 
                         SqlParameter strMapViewHash = new SqlParameter("@MapViewHash", SqlDbType.VarChar);
-                        strMapViewHash.Value = strHash;
+                        strMapViewHash.Value = _location.StrHash;
 
                         SqlParameter tDueDate = new SqlParameter("@DueDate", SqlDbType.DateTime);
                         tDueDate.Value = dueDate;
@@ -1244,7 +1780,7 @@ namespace ConnectionService
             try
             {
 
-                using (SqlConnection sqlConnection = new SqlConnection(_DatabaseConnectionString))
+                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
                 {
                     sqlConnection.Open();
 
@@ -1294,7 +1830,7 @@ namespace ConnectionService
 
             try
             {
-                using (SqlConnection sqlConnection = new SqlConnection(_DatabaseConnectionString))
+                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
                 {
                     sqlConnection.Open();
 
@@ -1342,7 +1878,7 @@ namespace ConnectionService
 
             try
             {
-                using (SqlConnection sqlConnection = new SqlConnection(_DatabaseConnectionString))
+                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
                 {
                     sqlConnection.Open();
 
@@ -1382,66 +1918,6 @@ namespace ConnectionService
             return retval;
         }
 
-        private bool GetAlertingUsers(int location_id, ref ArrayList users)
-        {
-            string sqlStatement = "SELECT REMOTE_CONTROL.REMOTE_CONTROL_ID, REMOTE_CONTROL_TYPE_ID, MEMO, CONTACT FROM REMOTE_CONTROL INNER JOIN ERROR ON REMOTE_CONTROL.REMOTE_CONTROL_ID=ERROR.REMOTE_CONTROL_ID WHERE ERROR.LOCATION_ID=@LocationId";
-
-            bool retval = true;
-
-            try
-            {
-                using (SqlConnection sqlConnection = new SqlConnection(_DatabaseConnectionString))
-                {
-                    sqlConnection.Open();
-
-                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
-                    {
-                        SqlParameter p_locationId = new SqlParameter("@LocationId", SqlDbType.Int);
-                        p_locationId.Value = location_id;
-
-                        cmd.Parameters.Add(p_locationId);
-
-                        using (SqlDataReader reader = cmd.ExecuteReader())
-                        {
-                            while (reader.Read())
-                            {
-                                AlertingUser user = new AlertingUser();
-                                user.Id = (int)reader[0];
-                                int type = (int)reader[1];
-
-                                user.Name = (string)reader[2];
-
-                                if (type == 2)  // email
-                                {
-                                    user.Flags = (int)ALERTING_FLAGS.EMAIL_ENABLED;
-                                    user.EmailAddress = (string)reader[3];
-                                }
-                                else if (type == 3) // sms
-                                {
-                                    user.Flags = (int)ALERTING_FLAGS.SMS_ENABLED;
-                                    user.TelephoneNumber = (string)reader[3];
-                                }
-
-                                users.Add(user);
-                            }
-                        }
-                    }
-
-                    sqlConnection.Close();
-                }
-            }
-            catch (Exception e)
-            {
-                LogFile.WriteErrorToLogFile("{0} in \'GetAlertingUsers\' appeared.", e.Message);
-                retval = false;
-            }
-            finally
-            {
-            }
-
-            return retval;
-        }
-
         private bool GetContainerAndLocation(string strIdent)
         {
             bool retval = true;
@@ -1464,6 +1940,11 @@ namespace ConnectionService
                             _container.ModemSignalQuality = System.Convert.ToUInt16(toks[3].Trim());
                             lat = System.Convert.ToDouble(toks[4].Trim(), CultureInfo.InvariantCulture);
                             lng = System.Convert.ToDouble(toks[5].Trim(), CultureInfo.InvariantCulture);
+
+                            if (toks.GetLength(0) > 6)
+                            {
+                                _container.SupplyVoltage = System.Convert.ToInt32(toks[6].Trim());
+                            }
                         }
                     }
                     catch (Exception excp)
@@ -1483,7 +1964,7 @@ namespace ConnectionService
 
                 try
                 {
-                    using (SqlConnection sqlConnection = new SqlConnection(_DatabaseConnectionString))
+                    using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
                     {
                         sqlConnection.Open();
 
@@ -1500,13 +1981,42 @@ namespace ConnectionService
                                 {
                                     _container.ContainerId = (int)reader["CONTAINER_ID"];
                                     _container.OperatorId = (int)reader["OPERATOR_ID"];
-                                    _container.MobileNumber = (string)reader["GSM_NR2"];
-                                    _container.IdentString = (string)reader["INT_IDENTNR"];
-                                    _container.DeviceNumber = (string)reader["DEVICE_NUMBER"];
+
+                                    if (reader["GSM_NR2"].GetType() != typeof(System.DBNull))
+                                        _container.MobileNumber = (string)reader["GSM_NR2"];
+                                    else
+                                        _container.MobileNumber = "---";
+
+                                    if (reader["INT_IDENTNR"].GetType() != typeof(System.DBNull))
+                                        _container.IdentString = (string)reader["INT_IDENTNR"];
+                                    else
+                                        _container.IdentString = "---";
+
+                                    if (reader["DEVICE_NUMBER"].GetType() != typeof(System.DBNull))
+                                        _container.DeviceNumber = (string)reader["DEVICE_NUMBER"];
+                                    else
+                                        _container.DeviceNumber = "---";
+
                                     _container.ContainerTypeId = (int)reader["CONTAINER_TYPE_ID"];
+
+                                    try
+                                    {
+                                        if (reader["FIRMWAREVERSION"].GetType() != typeof(System.DBNull))
+                                        {
+                                            _container.FirmwareVersion = (string)reader["FIRMWAREVERSION"];
+                                        }
+                                        else
+                                            _container.FirmwareVersion = "unknown";
+                                    }
+                                    catch (Exception excp)
+                                    {
+                                        LogFile.WriteErrorToLogFile("Exception ({0}) while trying to retrieve firmwareversion", excp.Message);
+                                    }
 
                                     GetOperatorParams(_container.OperatorId);
                                     GetContainerType(_container.ContainerTypeId);
+
+                                    RemoveContainerFromLocations(_container.ContainerId);
                                 }
                                 else
                                 {
@@ -1523,13 +2033,13 @@ namespace ConnectionService
                         using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
                         {
                             SqlParameter latMin = new SqlParameter("@LAT_MIN", SqlDbType.Float);
-                            latMin.Value = lat - 0.0010F;
+                            latMin.Value = lat - 0.0020F;
                             SqlParameter latMax = new SqlParameter("@LAT_MAX", SqlDbType.Float);
-                            latMax.Value = lat + 0.0010F;
+                            latMax.Value = lat + 0.0020F;
                             SqlParameter lngMin = new SqlParameter("@LNG_MIN", SqlDbType.Float);
-                            lngMin.Value = lng - 0.0010F;
+                            lngMin.Value = lng - 0.0020F;
                             SqlParameter lngMax = new SqlParameter("@LNG_MAX", SqlDbType.Float);
-                            lngMax.Value = lng + 0.0010F;
+                            lngMax.Value = lng + 0.0020F;
 
                             LogFile.WriteMessageToLogFile("Location area: {0}, {1}, {2}, {3}", latMin.Value, latMax.Value, lngMin.Value, lngMax.Value);
 
@@ -1540,20 +2050,71 @@ namespace ConnectionService
 
                             using (SqlDataReader reader = cmd.ExecuteReader())
                             {
-                                if (reader.Read())
-                                {
-                                    _location.LocationId = (int)reader["LOCATION_ID"];
-                                    _location.Name = (string)reader["LOCATION"];
-                                    _location.MaterialId = (int)reader["LOCATIONTYPE_ID"];
-                                    _location.Latitude = (double)reader["LAT"];
-                                    _location.Longitude = (double)reader["LNG"];
+                                List<Location> locations = new List<Location>();
 
-                                    GetMaterialName(_location.MaterialId);
+                                while (reader.Read())
+                                {
+                                    Location loc = new Location();
+
+                                    loc.LocationId = (int)reader["LOCATION_ID"];
+                                    loc.Name = (string)reader["LOCATION"];
+                                    loc.MaterialId = (int)reader["LOCATIONTYPE_ID"];
+                                    loc.Latitude = (double)reader["LAT"];
+                                    loc.Longitude = (double)reader["LNG"];
+                                    loc.IsWatchdogActive = (bool)reader["MONITORING_ACTIVE"];
+
+                                    if (reader["NIGHT_LOCK_START"].GetType() != typeof(System.DBNull))
+                                    {
+                                        DateTime dt = (DateTime)reader["NIGHT_LOCK_START"];
+
+                                        loc.NightLockStart = dt.Hour * 60 + dt.Minute;
+                                    }
+                                    else
+                                        loc.NightLockStart = 0;
+
+
+                                    if (reader["NIGHT_LOCK_DURATION"].GetType() != typeof(System.DBNull))
+                                    {
+                                        loc.NightLockDuration = (int)reader["NIGHT_LOCK_DURATION"];
+                                    }
+                                    else
+                                        loc.NightLockDuration = 0;
+
+                                    GetMaterialName(loc.MaterialId);
+
+                                    locations.Add(loc);
+                                }
+
+                                LogFile.WriteMessageToLogFile("Found {0} locations within search area.", locations.Count);
+
+                                double minDevLat = 90.0F;
+                                double minDevLong = 180.0F;
+                                Location bestLocation = null;
+
+                                foreach (Location loc in locations)
+                                {
+                                    double devLat = Math.Abs(lat - loc.Latitude);
+                                    double devLng = Math.Abs(lng - loc.Longitude);
+
+                                    LogFile.WriteMessageToLogFile("Location: {0}, deviation is lat: {1}, long: {2}", loc.LocationId, devLat, devLng);
+
+                                    if (devLat < minDevLat && devLng < minDevLong)
+                                    {
+                                        minDevLat = devLat;
+                                        minDevLong = devLng;
+                                        bestLocation = loc;
+                                    }
+                                }
+
+                                if (bestLocation != null)
+                                {
+                                    this._location = bestLocation;
+                                    LogFile.WriteMessageToLogFile("Selected Location: {0}, {1}", bestLocation.LocationId, bestLocation.Name);
+                                    LogFile.WriteMessageToLogFile("Nightlockstart: {0}, End: {1}, Duration: {2}", bestLocation.NightLockStart, bestLocation.NightLockEnd, bestLocation.NightLockDuration);
                                 }
                                 else
                                 {
-                                    LogFile.WriteErrorToLogFile("Error while excuting sql statement: {0}", cmd.CommandText);
-                                    retval = false;
+                                    LogFile.WriteMessageToLogFile("No location found within specified area!");
                                 }
 
                                 reader.Close();
@@ -1562,6 +2123,11 @@ namespace ConnectionService
 
                         if (_location.LocationId != 0)
                         {
+                            byte[] tmpHash = new MD5CryptoServiceProvider().ComputeHash(ASCIIEncoding.ASCII.GetBytes(_location.Name));
+                            _location.StrHash = ByteArrayToString(tmpHash).Substring(0, 8);
+
+                            SetMapviewHash(DateTime.Now.AddHours(10));
+
                             sqlStatement = "SELECT * FROM LOCATION_CONFIG WHERE LOCATION_ID=@LOCATIONID";
 
                             using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
@@ -1582,8 +2148,10 @@ namespace ConnectionService
                                     }
                                     else
                                     {
-                                        LogFile.WriteErrorToLogFile("Error while excuting sql statement: {0}", cmd.CommandText);
-                                        retval = false;
+                                        _location.PressStrokes = 3;
+                                        _location.PressPosition = false;
+                                        _location.FullWarningLevel = 75;
+                                        _location.FullErrorLevel = 100;
                                     }
 
                                     reader.Close();
@@ -1664,11 +2232,13 @@ namespace ConnectionService
                                 {
                                     _bIdentified = true;
 
-                                    LogFile.WriteMessageToLogFile("{0} Found entry for container: {1}, OperatorId: {2}, on Loaction: {3}, MaterialId: {3}, MobileNumber: {4}, PressStrokes: {5}, WarningLevel: {6}, ErrorLevel: {7}",
-                                        this.Name, _container.IdentString, _container.OperatorId, _location.MaterialId, _container.MobileNumber, _location.PressStrokes, _location.FullWarningLevel, _location.FullErrorLevel);
+                                    LogFile.WriteMessageToLogFile("{0} Found entry for container: {1}, ContainerId: {2}, on Location: {3}, MaterialId: {4}, MobileNumber: {5}, PressStrokes: {6}, PreFullLevel: {7}, FullLevel: {8}",
+                                        this.Name, _container.IdentString, _container.ContainerId, _location.LocationId, _location.MaterialId,
+                                        _container.MobileNumber, _location.PressStrokes, _location.FullWarningLevel, _location.FullErrorLevel);
 
-                                    string strCommand = String.Format("#CON={0},{1},{2},{3},{4},{5},{6},{7},{8},{9},", _destTime.ToString("ddMMyyyy"), _destTime.ToString("HHmmss"),
-                                        _container.ContainerId, _container.OperatorId, _location.MaterialId, _container.MobileNumber, _location.PressStrokes, _location.PressPosition ? 1 : 0, _location.FullWarningLevel, _location.FullErrorLevel);
+                                    string strCommand = String.Format("#CON={0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12},", _destTime.ToString("ddMMyyyy"), _destTime.ToString("HHmmss"),
+                                        _container.ContainerId, _container.OperatorId, _location.MaterialId, _container.MobileNumber, _location.PressStrokes, _location.PressPosition ? 1 : 0, _location.FullWarningLevel, _location.FullErrorLevel,
+                                        _container.FirmwareVersion, _location.NightLockStart, _location.NightLockDuration);
 
                                     if (SendCommand(strCommand))
                                         state = _CLIENT_STATE.WAIT_CONFIG_ACK;
@@ -1723,6 +2293,7 @@ namespace ConnectionService
                             break;
 
                         case _CLIENT_STATE.STOP:
+                            UpdateContainerLastCommunication(_container.ContainerId, DateTime.Now);
                             LogFile.WriteMessageToLogFile("{0} Stop client -> up to date", Name);
                             Stop();
                             break;
