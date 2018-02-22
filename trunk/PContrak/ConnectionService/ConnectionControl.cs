@@ -356,7 +356,7 @@ namespace ConnectionService
                                             }
                                         }
 
-                                        if (bDoAlerting && loc.LocationId == 708)
+                                        if (bDoAlerting) // && loc.LocationId == 708)
                                         {
                                             string smsMessage = String.Format("{0}: Warning: No Transactions since: {1} minutes", loc.Name, loc.WatchdogDuration);
                                             string subject = "WIP - LocationMonitoring";
@@ -549,6 +549,9 @@ namespace ConnectionService
         private int _supplyVoltage;                 // actual supply voltage value (raw value)
         private DbGeography _location;              // gps coordinates where container is located
         private DateTime _tLastCommunication;       // time of last transaction
+        private int _journalSize = 0;              // max num entries in journal  
+        private int _writePointer = 0;             // actual write pointer of journal
+        private int _readPointer = 0;              // actual read pointer of journal
 
         #endregion
 
@@ -573,6 +576,9 @@ namespace ConnectionService
         public int ContainerTypeId { get => _containerTypeId; set => _containerTypeId = value; }
         public string FirmwareVersion { get => _firmwareVersion; set => _firmwareVersion = value; }
         public int SupplyVoltage { get => _supplyVoltage; set => _supplyVoltage = value; }
+        public int WritePointer { get => _writePointer; set => _writePointer = value; }
+        public int ReadPointer { get => _readPointer; set => _readPointer = value; }
+        public int JournalSize { get => _journalSize; set => _journalSize = value; }
 
         #endregion
 
@@ -594,6 +600,7 @@ namespace ConnectionService
         #region members
 
         private int _locationId;                    // location id
+        private int _locationGroupId;               // location group to which this location belongs
         private string _name;                       // name of location
         private string _materialName;               // name of material
         private string _strHash;
@@ -608,7 +615,8 @@ namespace ConnectionService
         private int _nightLockEnd;                  // end of nightlock (minutes after midnight)
         private int _nightLockDuration;             // minutes
         private bool _isWatchdogActive;
-        private int _WatchdogDuration;              
+        private int _WatchdogDuration;
+        private bool _bValid;                       // is location valid (operatorId =)
 
         #endregion
 
@@ -630,6 +638,8 @@ namespace ConnectionService
         public int NightLockDuration { get => _nightLockDuration; set => _nightLockDuration = value; }
         public bool IsWatchdogActive { get => _isWatchdogActive; set => _isWatchdogActive = value; }
         public int WatchdogDuration { get => _WatchdogDuration; set => _WatchdogDuration = value; }
+        public int LocationGroupId { get => _locationGroupId; set => _locationGroupId = value; }
+        public bool IsValid { get => _bValid; set => _bValid = value; }
 
         #endregion
 
@@ -641,7 +651,7 @@ namespace ConnectionService
             MaterialId = 2; // Karton
             PressStrokes = 3;
             FullWarningLevel = 75;
-            FullWarningLevel = 95;
+            FullErrorLevel = 95;
             LocationId = 0;
             _pressPosition = false;
         }
@@ -784,6 +794,9 @@ namespace ConnectionService
             WAIT_CONFIG,
             WAIT_CONFIG_ACK,
             READ_EVENTS,
+            START_READ_JOURNAL,
+            READ_JOURNAL,
+            WAIT_READPOINTER_ACK,
             STOP,
             ERROR
         }
@@ -1247,18 +1260,18 @@ namespace ConnectionService
                         //
                         ////////////////////////////////////////////////////
 
-                        ////////////////////////////////////////////////////
-                        // [3] GSM Longitude
-                        // [4] GSM Latitude
-
-                        //string strGeo = string.Format(CultureInfo.InvariantCulture.NumberFormat, "POINT({0} {1})", toks[3], toks[4]);
-                        //// 4326 is most common coordinate system used by GPS/Maps
-                        //_container.Location = DbGeography.PointFromText(strGeo, 4326);
-
-                        //LogFile.WriteMessageToLogFile("{0} Location: {1}", this.Name, strGeo);
-
-                        //
-                        ////////////////////////////////////////////////////
+                        if (protocolVersion == 2)
+                        {
+                            _container.WritePointer = 0;
+                            _container.ReadPointer = 0;
+                           
+                        }
+                        else if (protocolVersion >= 3)
+                        {
+                            _container.JournalSize = Convert.ToInt32(toks[3]);
+                            _container.WritePointer = Convert.ToInt32(toks[4]);
+                            _container.ReadPointer = Convert.ToInt32(toks[5]);
+                        }
                     }
                     catch (Exception excp)
                     {
@@ -1296,6 +1309,125 @@ namespace ConnectionService
             return sOutput.ToString();
         }
 
+        private bool ParseJournalEntries(string str, int numberOfExpectedEntries)
+        {
+            try
+            {
+                // remove header
+                str = str.Substring(5);
+                // split in entries
+                string[] str_entry = str.Split(new char[] { ';' });
+
+                if (str_entry.GetLength(0) < numberOfExpectedEntries)
+                {
+                    LogFile.WriteErrorToLogFile("{0} ParseJournalEntries, unexpected number of entries ({1})!", this.Name, str_entry.GetLength(0));
+                    return false;
+                }
+
+                // parse all entries
+                for (int i = 0; i < numberOfExpectedEntries; i++)
+                {
+                    try
+                    {
+                        string language_code = "";
+                        string[] toks = str_entry[i].Split(new char[] { ',' });
+
+                        if (toks.GetLength(0) != 11)
+                        {
+                            LogFile.WriteErrorToLogFile("{0} ParseJournalEntries, unexpected number of fields in entry: {1}!", this.Name, str_entry[i]);
+                            return false;
+                        }
+
+                        DateTime date = new DateTime();
+
+                        try
+                        {
+                            date = DateTime.ParseExact(toks[2], "ddMMyyyy", null);
+                        }
+                        catch (Exception)
+                        {
+                            LogFile.WriteErrorToLogFile("{0} Invalid date format in ParseJournalEntry: {1}", this.Name, str_entry[i]);
+                        }
+
+                        DateTime time = new DateTime();
+                        try
+                        {
+                            time = DateTime.ParseExact(toks[3], "HHmmss", null);
+                        }
+                        catch (Exception)
+                        {
+                            LogFile.WriteErrorToLogFile("{0} Invalid time format in ParseJournalEntry: {1}", this.Name, str_entry[i]);
+                        }
+
+                        date = date.Add(time.TimeOfDay);
+
+                        int entry_address = Convert.ToInt32(toks[0]);
+                        int locationId = Convert.ToInt32(toks[1]);
+                        string customerNumber = toks[4];
+                        int transactionStatusId = Convert.ToInt32(toks[6]);
+                        int duration = Convert.ToInt32(toks[7]);
+                        int amount = Convert.ToInt32(toks[8]);
+                        decimal positiveCreditBalance = Convert.ToDecimal(toks[9]) / 100;
+                        int weight = Convert.ToInt32(toks[10]);
+
+                        // update transaction count in container table
+                        if (!IncrementContainerTransactionCounter(_container.ContainerId))
+                        {
+                            LogFile.WriteErrorToLogFile("{0} ParseJournalEntries, could update container transaction counter!", this.Name);
+                        }
+
+                        int customerId = -1;
+                        int cardTypeId = -1;
+
+                        if (!GetCustomerData(customerNumber, _container.OperatorId, ref customerId, ref cardTypeId, ref language_code))
+                        {
+                            LogFile.WriteErrorToLogFile("{0} ParseJournalEntries, error while retrieving customer data!", this.Name);
+                            continue;
+                        }
+
+                        // store last waste disposal if we have transaction status id 1,2,3
+                        if ((transactionStatusId & 0x03) != 0)
+                        {
+                            if (!UpdateCustomerLastWasteDisposal(customerId, date))
+                            {
+                                LogFile.WriteErrorToLogFile("{0} ParseJournalEntries, error while updating last waste disposal date!", this.Name);
+                                continue;
+                            }
+                        }
+
+                        // if card type is a prepaid card, store credit balance
+                        if (cardTypeId == 1)   
+                        {
+                            if (!UpdateCustomersPositiveCreditBalance(customerId, positiveCreditBalance))
+                            {
+                                LogFile.WriteErrorToLogFile("{0} ParseJournalEntries, error while updating customers positive credit balance!", this.Name);
+                                continue;
+                            }
+                        }
+
+                        if (!StoreTransaction(_container.ContainerId, date, customerId, transactionStatusId, weight, duration, amount))
+                        {
+                            LogFile.WriteErrorToLogFile("{0} ParseJournalEntries, error while storing transaction!", this.Name);
+                            continue;
+                        }
+
+                    }
+                    catch (Exception excp)
+                    {
+                        LogFile.WriteErrorToLogFile("{0} Exception: {1}, while parsing entry {2}", this.Name, excp.Message, i + 1);
+                    }
+                }
+
+                return true;
+            }
+            catch (Exception e)
+            {
+                LogFile.WriteErrorToLogFile("{0} Exception: {1} in \'ParseJournalEntries\' appeared.", this.Name, e.Message);
+            }
+
+            return false;
+        }
+
         private bool ReadEvents(string frame)
         {
             try
@@ -1326,7 +1458,7 @@ namespace ConnectionService
                             }
                             else if (type == 1) // Nearly full Event
                             {
-                                message += "VOR VOLL" + String.Format("({0}) %", _container.ActualFillingLevel);
+                                message += "VOR VOLL " + String.Format("( {0} % )", _location.FullWarningLevel);
                             }
                             else if (type == 2) // Full Event
                             {
@@ -1369,10 +1501,7 @@ namespace ConnectionService
                         }
                         else  // Non error event
                         {
-                            if (type == 256)    // TRANSACTION_OK
-                            {
-                                StoreTransaction(_container.ContainerId, FromUnixTime(time));
-                            }
+ 
                         }
                     }
                 }
@@ -1434,7 +1563,7 @@ namespace ConnectionService
             return "";
         }
 
-        #endregion
+#endregion
 
         #region Protocol methods
 
@@ -1513,7 +1642,202 @@ namespace ConnectionService
 
         #region Database methods
 
-        public bool StoreTransaction(int containerId, DateTime date)
+        public bool UpdateCustomersPositiveCreditBalance(int customerId, decimal positiveCreditBalance)
+        {
+            string sqlStatement = "UPDATE CUSTOMER SET POSITIVE_CREDIT_BALANCE = @PositiveCreditBalance WHERE CUSTOMER_ID=@CustomerId";
+            bool retval = true;
+
+            try
+            {
+                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
+                {
+                    sqlConnection.Open();
+
+                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
+                    {
+                        SqlParameter p_posCredBalance = new SqlParameter("@PositiveCreditBalance", SqlDbType.Decimal);
+                        p_posCredBalance.Value = positiveCreditBalance;
+                        cmd.Parameters.Add(p_posCredBalance);
+
+                        SqlParameter p_customerId = new SqlParameter("@CustomerId", SqlDbType.Int);
+                        p_customerId.Value = customerId;
+                        cmd.Parameters.Add(p_customerId);
+
+                        if (cmd.ExecuteNonQuery() != 1)
+                        {
+                            LogFile.WriteErrorToLogFile("Error while trying to store customers (id={0}) positive credit balance", customerId);
+                            retval = false;
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                LogFile.WriteErrorToLogFile("Exception: {0} in \'UpdateCustomersPositiveCreditBalance\' appeared.", e.Message);
+                retval = false;
+            }
+            finally
+            {
+            }
+
+            return retval;
+        }
+
+        public bool UpdateCustomerLastWasteDisposal(int customer_id, DateTime date)
+        {
+            string sqlStatement = "UPDATE CUSTOMER SET LAST_WASTE_DISPOSAL = @DateLastDisposal WHERE CUSTOMER_ID=@CustomerId";
+            bool retval = true;
+
+            try
+            {
+                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
+                {
+                    sqlConnection.Open();
+
+                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
+                    {
+                        SqlParameter p_date = new SqlParameter("@DateLastDisposal", SqlDbType.DateTime);
+                        p_date.Value = date;
+                        cmd.Parameters.Add(p_date);
+
+                        SqlParameter p_customerId = new SqlParameter("@CustomerId", SqlDbType.Int);
+                        p_customerId.Value = customer_id;
+                        cmd.Parameters.Add(p_customerId);
+
+                        if (cmd.ExecuteNonQuery() != 1)
+                        {
+                            LogFile.WriteErrorToLogFile("Error while trying to store customers (id={0}), last waste disposal time stamp {1}", customer_id, date);
+                            retval = false;
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                LogFile.WriteErrorToLogFile("Exception: {0} in \'UpdateCustomerLastWasteDisposal\' appeared.", e.Message);
+                retval = false;
+            }
+            finally
+            {
+            }
+
+            return retval;
+        }
+
+        public bool GetCustomerData(string customerNumber, int operatorId, ref int customerId, ref int cardTypeId, ref string languageCode)
+        {
+            string sqlStatement = "SELECT CUSTOMER_ID, CARD_TYPE_ID, LANGUAGE_CODE FROM CUSTOMER WHERE CUSTOMER_NUMBER=@CustomerNumber AND OPERATOR_ID=@OperatorId";
+            bool retval = true;
+
+            try
+            {
+                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
+                {
+                    sqlConnection.Open();
+
+                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
+                    {
+                        SqlParameter p_customerNumber = new SqlParameter("@CustomerNumber", SqlDbType.VarChar);
+                        p_customerNumber.Value = customerNumber;
+
+                        cmd.Parameters.Add(p_customerNumber);
+
+                        SqlParameter p_operatorId = new SqlParameter("@OperatorId", SqlDbType.Int);
+                        p_operatorId.Value = operatorId;
+
+                        cmd.Parameters.Add(p_operatorId);
+
+                        using (SqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            if (reader.Read())
+                            {
+                                customerId = (int)reader[0];
+                                cardTypeId = (int)reader[1];
+                                languageCode = (string)reader[2];
+                            }
+                            else
+                            {
+                                LogFile.WriteErrorToLogFile("{0} No customer with customer number: {1} found for operator: {2}", this.Name, customerId, operatorId);
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                LogFile.WriteErrorToLogFile("{0} in \'GetCustomerData\' appeared.", e.Message);
+                retval = false;
+            }
+            finally
+            {
+            }
+
+            return retval;
+        }
+
+        public bool IncrementContainerTransactionCounter(int container_id)
+        {
+            string sqlStatement = "SELECT TRANSACTION_COUNT FROM CONTAINER WHERE CONTAINER_ID=@ContainerId";
+            bool retval = true;
+            int transaction_counter = 0;
+
+            try
+            {
+                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
+                {
+                    sqlConnection.Open();
+
+                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
+                    {
+                        SqlParameter p_containerId = new SqlParameter("@ContainerId", SqlDbType.Int);
+                        p_containerId.Value = container_id;
+                        cmd.Parameters.Add(p_containerId);
+
+                        using (SqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            if (reader.Read())
+                            {
+                                transaction_counter = (int)reader[0];
+                            }
+                            else
+                            {
+                                LogFile.WriteErrorToLogFile("ContainerID {0}: IncrementTransactionCounter, Cannot access field TRANSACTION_COUNT", container_id);
+                            }
+                        }
+                    }
+
+                    using (SqlCommand cmd_update = new SqlCommand("UPDATE CONTAINER SET TRANSACTION_COUNT=@TransactionCount WHERE CONTAINER_ID=@ContainerId", sqlConnection))
+                    {
+                        SqlParameter p_trans_count = new SqlParameter("@TransactionCount", SqlDbType.Int);
+                        p_trans_count.Value = ++transaction_counter;
+
+                        SqlParameter p_contID = new SqlParameter("@ContainerId", SqlDbType.Int);
+                        p_contID.Value = container_id;
+
+                        cmd_update.Parameters.Add(p_trans_count);
+                        cmd_update.Parameters.Add(p_contID);
+
+                        if (cmd_update.ExecuteNonQuery() != 1)
+                        {
+                            LogFile.WriteErrorToLogFile("ContainerID {0}: Error while trying to update transaction counter", container_id);
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                LogFile.WriteErrorToLogFile("Exception: {0} in \'GetMaxTransactionId\' appeared.", e.Message);
+                retval = false;
+            }
+            finally
+            {
+            }
+
+            return retval;
+        }
+
+        public bool StoreTransaction(int containerId, DateTime date, int customerId, int transStatusId, int weight, int duration, int amount)
         {
             bool retval = true;
             int lastTransId = 0;
@@ -1547,11 +1871,11 @@ namespace ConnectionService
                         cmd.Parameters.Add(p_transId);
 
                         SqlParameter p_customerId = new SqlParameter("@CustomerId", SqlDbType.Int);
-                        p_customerId.Value = 1001;
+                        p_customerId.Value = customerId;
                         cmd.Parameters.Add(p_customerId);
 
                         SqlParameter p_transactionStatusId = new SqlParameter("@TransactionStatusId", SqlDbType.Int);
-                        p_transactionStatusId.Value = 1;
+                        p_transactionStatusId.Value = transStatusId;
                         cmd.Parameters.Add(p_transactionStatusId);
 
                         SqlParameter p_locationId = new SqlParameter("@LocationId", SqlDbType.Int);
@@ -1563,15 +1887,15 @@ namespace ConnectionService
                         cmd.Parameters.Add(p_date);
 
                         SqlParameter p_weight = new SqlParameter("@Weight", SqlDbType.Int);
-                        p_weight.Value = 10;
+                        p_weight.Value = weight;
                         cmd.Parameters.Add(p_weight);
 
                         SqlParameter p_duration = new SqlParameter("@Duration", SqlDbType.Int);
-                        p_duration.Value = 5;
+                        p_duration.Value = duration;
                         cmd.Parameters.Add(p_duration);
 
                         SqlParameter p_amount = new SqlParameter("@Amount", SqlDbType.Int);
-                        p_amount.Value = 0;
+                        p_amount.Value = amount;
                         cmd.Parameters.Add(p_amount);
 
                         SqlParameter p_containerId = new SqlParameter("@ContainerId", SqlDbType.Int);
@@ -1921,7 +2245,8 @@ namespace ConnectionService
         private bool GetContainerAndLocation(string strIdent)
         {
             bool retval = true;
-            double lat = 0.0F, lng = 0.0F; 
+            double lat = 0.0F, lng = 0.0F;
+            int preferedMaterialId = -1;
 
             try
             {
@@ -1945,6 +2270,16 @@ namespace ConnectionService
                             {
                                 _container.SupplyVoltage = System.Convert.ToInt32(toks[6].Trim());
                             }
+
+                            if (toks.GetLength(0) > 7)
+                            {
+                                preferedMaterialId = System.Convert.ToInt32(toks[7].Trim());
+                            }
+
+                            if (toks.GetLength(0) > 8)
+                            {
+                                _container.ActualFillingLevel = System.Convert.ToInt32(toks[8].Trim());
+                            }
                         }
                     }
                     catch (Exception excp)
@@ -1961,6 +2296,7 @@ namespace ConnectionService
                 }
 
                 string sqlStatement = "SELECT * FROM CONTAINER WHERE GSM_NUMBER=@ICCID";
+                List<Location> locations = new List<Location>();
 
                 try
                 {
@@ -2030,6 +2366,12 @@ namespace ConnectionService
 
                         sqlStatement = "SELECT * FROM LOCATION WHERE FALCONICLOCATION=1 AND LAT >= @LAT_MIN AND LAT <= @LAT_MAX AND LNG >= @LNG_MIN AND LNG <= @LNG_MAX";
 
+                        if (preferedMaterialId != -1)
+                        {
+                            LogFile.WriteMessageToLogFile("Select location with specified materialId: {0}", preferedMaterialId);
+                            sqlStatement += " AND LOCATIONTYPE_ID=@LocationTypeId";
+                        }
+
                         using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
                         {
                             SqlParameter latMin = new SqlParameter("@LAT_MIN", SqlDbType.Float);
@@ -2040,7 +2382,6 @@ namespace ConnectionService
                             lngMin.Value = lng - 0.0020F;
                             SqlParameter lngMax = new SqlParameter("@LNG_MAX", SqlDbType.Float);
                             lngMax.Value = lng + 0.0020F;
-
                             LogFile.WriteMessageToLogFile("Location area: {0}, {1}, {2}, {3}", latMin.Value, latMax.Value, lngMin.Value, lngMax.Value);
 
                             cmd.Parameters.Add(latMin);
@@ -2048,15 +2389,22 @@ namespace ConnectionService
                             cmd.Parameters.Add(lngMin);
                             cmd.Parameters.Add(lngMax);
 
+                            if (preferedMaterialId != -1)
+                            {
+                                SqlParameter prefMat = new SqlParameter("@LocationTypeId", SqlDbType.Int);
+                                prefMat.Value = preferedMaterialId;
+
+                                cmd.Parameters.Add(prefMat);
+                            }
+
                             using (SqlDataReader reader = cmd.ExecuteReader())
                             {
-                                List<Location> locations = new List<Location>();
-
                                 while (reader.Read())
                                 {
                                     Location loc = new Location();
 
                                     loc.LocationId = (int)reader["LOCATION_ID"];
+                                    loc.LocationGroupId = (int)reader["LOCATION_GROUP_ID"];
                                     loc.Name = (string)reader["LOCATION"];
                                     loc.MaterialId = (int)reader["LOCATIONTYPE_ID"];
                                     loc.Latitude = (double)reader["LAT"];
@@ -2080,46 +2428,93 @@ namespace ConnectionService
                                     else
                                         loc.NightLockDuration = 0;
 
-                                    GetMaterialName(loc.MaterialId);
-
                                     locations.Add(loc);
-                                }
-
-                                LogFile.WriteMessageToLogFile("Found {0} locations within search area.", locations.Count);
-
-                                double minDevLat = 90.0F;
-                                double minDevLong = 180.0F;
-                                Location bestLocation = null;
-
-                                foreach (Location loc in locations)
-                                {
-                                    double devLat = Math.Abs(lat - loc.Latitude);
-                                    double devLng = Math.Abs(lng - loc.Longitude);
-
-                                    LogFile.WriteMessageToLogFile("Location: {0}, deviation is lat: {1}, long: {2}", loc.LocationId, devLat, devLng);
-
-                                    if (devLat < minDevLat && devLng < minDevLong)
-                                    {
-                                        minDevLat = devLat;
-                                        minDevLong = devLng;
-                                        bestLocation = loc;
-                                    }
-                                }
-
-                                if (bestLocation != null)
-                                {
-                                    this._location = bestLocation;
-                                    LogFile.WriteMessageToLogFile("Selected Location: {0}, {1}", bestLocation.LocationId, bestLocation.Name);
-                                    LogFile.WriteMessageToLogFile("Nightlockstart: {0}, End: {1}, Duration: {2}", bestLocation.NightLockStart, bestLocation.NightLockEnd, bestLocation.NightLockDuration);
-                                }
-                                else
-                                {
-                                    LogFile.WriteMessageToLogFile("No location found within specified area!");
                                 }
 
                                 reader.Close();
                             }
                         }
+
+                        LogFile.WriteMessageToLogFile("Found {0} locations within search area.", locations.Count);
+
+                        // filter out locations which does not matches our operator id
+                        foreach (Location loc in locations)
+                        {
+                            sqlStatement = "SELECT * FROM LOCATION_GROUP WHERE LOCATION_GROUP_ID=@LocationGroupId";
+
+                            using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
+                            {
+                                SqlParameter locGroupId = new SqlParameter("@LocationGroupId", SqlDbType.Int);
+                                locGroupId.Value = loc.LocationGroupId;
+
+                                cmd.Parameters.Add(locGroupId);
+
+                                using (SqlDataReader reader = cmd.ExecuteReader())
+                                {
+                                    if (reader.Read())
+                                    {
+                                        int operatorId = (int)reader["OPERATOR_ID"];
+                                        if (_container.OperatorId == operatorId)
+                                        {
+                                            LogFile.WriteMessageToLogFile("Location: {0}, groupid: {1}, belongs to our operator id: {2}", loc.LocationId, loc.LocationGroupId, _container.OperatorId);
+                                            loc.IsValid = true;
+                                        }
+                                        else
+                                        {
+                                            LogFile.WriteMessageToLogFile("Location: {0}, groupid: {1}, wrong operator id: {2}", loc.LocationId, loc.LocationGroupId, operatorId);
+                                            loc.IsValid = false;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        LogFile.WriteMessageToLogFile("No Location group found with groupid: {0}", loc.LocationGroupId);
+                                        loc.IsValid = false;
+                                    }
+                                    reader.Close();
+                                }
+                            }
+                        }
+
+                        double minDevLat = 90.0F;
+                        double minDevLong = 180.0F;
+                        Location bestLocation = null;
+
+                        foreach (Location loc in locations)
+                        {
+                            double devLat = Math.Abs(lat - loc.Latitude);
+                            double devLng = Math.Abs(lng - loc.Longitude);
+
+                            if (loc.IsValid)
+                            {
+                                LogFile.WriteMessageToLogFile("Location: {0}, deviation is lat: {1}, long: {2}", loc.LocationId, devLat, devLng);
+
+                                if (devLat < minDevLat && devLng < minDevLong)
+                                {
+                                    minDevLat = devLat;
+                                    minDevLong = devLng;
+                                    bestLocation = loc;
+                                }
+                            }
+                            else
+                            {
+                                LogFile.WriteMessageToLogFile("Location: {0}, does not belong to operator: {1}", loc.LocationId, _container.OperatorId);
+                            }
+                        }
+
+                        if (bestLocation != null)
+                        {
+                            this._location = bestLocation;
+
+                            LogFile.WriteMessageToLogFile("Selected Location: {0}, {1}", bestLocation.LocationId, bestLocation.Name);
+                            LogFile.WriteMessageToLogFile("Nightlockstart: {0}, End: {1}, Duration: {2}", bestLocation.NightLockStart, bestLocation.NightLockEnd, bestLocation.NightLockDuration);
+
+                            GetMaterialName(_location.MaterialId);
+                        }
+                        else
+                        {
+                            LogFile.WriteMessageToLogFile("No location found within specified area!");
+                        }
+
 
                         if (_location.LocationId != 0)
                         {
@@ -2157,6 +2552,13 @@ namespace ConnectionService
                                     reader.Close();
                                 }
                             }
+                        }
+                        else
+                        {
+                            _location.PressStrokes = 1;
+                            _location.PressPosition = false;
+                            _location.FullWarningLevel = 75;
+                            _location.FullErrorLevel = 100;
                         }
 
                         sqlConnection.Close();
@@ -2198,7 +2600,7 @@ namespace ConnectionService
             return retval;
         }
 
-        #endregion
+#endregion
 
         #region Thread routines
 
@@ -2210,6 +2612,7 @@ namespace ConnectionService
             string str;
             WaitHandle[] waitHandles = new WaitHandle[2];
             int index;
+            int numberOfExpectedEntries = 0;
             bool bBreak = false;
 
             waitHandles[0] = _receivedEvent;
@@ -2236,9 +2639,9 @@ namespace ConnectionService
                                         this.Name, _container.IdentString, _container.ContainerId, _location.LocationId, _location.MaterialId,
                                         _container.MobileNumber, _location.PressStrokes, _location.FullWarningLevel, _location.FullErrorLevel);
 
-                                    string strCommand = String.Format("#CON={0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12},", _destTime.ToString("ddMMyyyy"), _destTime.ToString("HHmmss"),
+                                    string strCommand = String.Format("#CON={0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12},{13},", _destTime.ToString("ddMMyyyy"), _destTime.ToString("HHmmss"),
                                         _container.ContainerId, _container.OperatorId, _location.MaterialId, _container.MobileNumber, _location.PressStrokes, _location.PressPosition ? 1 : 0, _location.FullWarningLevel, _location.FullErrorLevel,
-                                        _container.FirmwareVersion, _location.NightLockStart, _location.NightLockDuration);
+                                        _container.FirmwareVersion, _location.NightLockStart, _location.NightLockDuration, _container.ContainerTypeId);
 
                                     if (SendCommand(strCommand))
                                         state = _CLIENT_STATE.WAIT_CONFIG_ACK;
@@ -2262,7 +2665,14 @@ namespace ConnectionService
                                 if (analyseStatus(str))
                                 {
                                     if (_container.NumberOfStoredEvents == 0)
-                                        state = _CLIENT_STATE.STOP;
+                                    {
+                                        if (_container.WritePointer != _container.ReadPointer)
+                                        {
+                                            state = _CLIENT_STATE.START_READ_JOURNAL;
+                                        }
+                                        else
+                                            state = _CLIENT_STATE.STOP;
+                                    }
                                     else
                                     {
                                         state = _CLIENT_STATE.READ_EVENTS;
@@ -2283,11 +2693,73 @@ namespace ConnectionService
                             if (_receivedFrames.Count > 0 && (str = getFrame("%EVT=")) != "")
                             {
                                 ReadEvents(str);
-                                state = _CLIENT_STATE.STOP;
+
+                                if (_container.WritePointer != _container.ReadPointer)
+                                {
+                                    state = _CLIENT_STATE.START_READ_JOURNAL;
+                                }
+                                else
+                                    state = _CLIENT_STATE.STOP;
                             }
                             else if (DateTime.Now.Subtract(_tLastCommandToEco).TotalSeconds > 15)
                             {
                                 LogFile.WriteMessageToLogFile("{0} Timeout while waiting for stored events", Name);
+                                state = _CLIENT_STATE.ERROR;
+                            }
+                            break;
+
+                        case _CLIENT_STATE.START_READ_JOURNAL:
+                            {
+                                if (_container.WritePointer > _container.ReadPointer)
+                                    numberOfExpectedEntries = _container.WritePointer - _container.ReadPointer;
+                                else
+                                    numberOfExpectedEntries = _container.WritePointer + (_container.JournalSize - _container.ReadPointer);
+
+                                String command = String.Format("#JOU?{0},{1}", _container.ReadPointer, numberOfExpectedEntries);
+                                SendCommand(command);
+
+                                state = _CLIENT_STATE.READ_JOURNAL;
+
+                                break;
+                            }
+                        case _CLIENT_STATE.READ_JOURNAL:
+                            if (_receivedFrames.Count > 0 && (str = getFrame("%JOU=")) != "")
+                            {
+                                ParseJournalEntries(str, numberOfExpectedEntries);
+                                int newReadPointer = _container.ReadPointer + numberOfExpectedEntries;
+
+                                if (newReadPointer >= _container.JournalSize)
+                                    newReadPointer = newReadPointer - _container.JournalSize;
+
+                                SendCommand(String.Format("#RDP={0},{1}", newReadPointer, "xyz"));  // no security code
+
+                                state = _CLIENT_STATE.WAIT_READPOINTER_ACK;
+                            }
+                            else if (DateTime.Now.Subtract(_tLastCommandToEco).TotalSeconds > 15)
+                            {
+                                LogFile.WriteMessageToLogFile("{0} Timeout while waiting for stored events", Name);
+                                state = _CLIENT_STATE.ERROR;
+                            }
+                            break;
+
+                        case _CLIENT_STATE.WAIT_READPOINTER_ACK:
+
+                            if (_receivedFrames.Count > 0 && (str = getFrame("%RDP=")) != "")
+                            {
+                                _container.ReadPointer = Convert.ToInt32(str.Substring(5).Trim());
+
+                                if (_container.WritePointer == _container.ReadPointer)
+                                {
+                                    state = _CLIENT_STATE.STOP;
+                                }
+                                else
+                                {
+                                    state = _CLIENT_STATE.START_READ_JOURNAL;
+                                }
+                            }
+                            else if (DateTime.Now > _tLastCommandToEco.AddSeconds(60))
+                            {
+                                LogFile.WriteErrorToLogFile("{0} Timeout while waiting read pointer acknowledge", this.Name);
                                 state = _CLIENT_STATE.ERROR;
                             }
                             break;
@@ -2420,6 +2892,7 @@ namespace ConnectionService
                 _tcpClient.Close();
         }
 
-        #endregion
+    #endregion
+
     }
 }
