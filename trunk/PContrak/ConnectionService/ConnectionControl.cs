@@ -2555,7 +2555,7 @@ namespace ConnectionService
                         }
                         else
                         {
-                            _location.PressStrokes = 1;
+                            _location.PressStrokes = 3;
                             _location.PressPosition = false;
                             _location.FullWarningLevel = 75;
                             _location.FullErrorLevel = 100;
