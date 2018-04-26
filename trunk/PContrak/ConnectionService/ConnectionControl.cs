@@ -1370,6 +1370,19 @@ namespace ConnectionService
                         decimal positiveCreditBalance = Convert.ToDecimal(toks[9]) / 100;
                         int weight = Convert.ToInt32(toks[10]);
 
+                        // if customer number is a very high values (QR Lock)
+                        // we have to take care, ..
+                        try
+                        {
+                            // transactions with no customer number are normal container status messages
+                            if (Convert.ToInt32(customerNumber) == 0)
+                            {
+                                StoreContainerStatus(_container.ContainerId, _location.LocationId, _container.MobileNumber, transactionStatusId, date);
+                                continue;
+                            }
+                        }
+                        catch (Exception) { };
+
                         // update transaction count in container table
                         if (!IncrementContainerTransactionCounter(_container.ContainerId))
                         {
@@ -1757,7 +1770,7 @@ namespace ConnectionService
                             }
                             else
                             {
-                                LogFile.WriteErrorToLogFile("{0} No customer with customer number: {1} found for operator: {2}", this.Name, customerId, operatorId);
+                                LogFile.WriteErrorToLogFile("{0} No customer with customer number: {1} found for operator: {2}", this.Name, customerNumber, operatorId);
                                 return false;
                             }
                         }
@@ -1922,6 +1935,86 @@ namespace ConnectionService
             catch (Exception e)
             {
                 LogFile.WriteErrorToLogFile("Exception: {0} in \'StoreTransaction\' appeared.", e.Message);
+                retval = false;
+            }
+            finally
+            {
+            }
+
+            return retval;
+        }
+
+        public bool StoreContainerStatus(int container_id, int location_id, string gsm_number, int code, DateTime date)
+        {
+            bool retval = true;
+
+            try
+            {
+                int status_group_id = (code < 1000) ? code : (code / 1000) * 1000;
+                int last_container_status_id = 0;
+
+                // first get max container status id
+                string sqlStatement = "SELECT MAX(CONTAINER_STATUS_ID) AS MAX_CONTAINERSTATUS_ID FROM CONTAINER_STATUS";
+
+                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
+                {
+                    sqlConnection.Open();
+
+                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
+                    {
+                        using (SqlDataReader reader = cmd.ExecuteReader())
+                        {
+                            if (reader.Read())
+                            {
+                                last_container_status_id = (int)reader[0];
+                            }
+                        }
+                    }
+
+                    sqlStatement = "INSERT INTO CONTAINER_STATUS ([CONTAINER_STATUS_ID], [LOCATION_ID], [CONTAINER_ID], [STATUS_GROUP_ID], [STATUS_MESSAGE_ID], [DATE], [GSM_NUMBER]) VALUES (@ContainerStatusId, @LocationId, @ContainerId, @StatusGroupId, @StatusMessageId, @Date, @GSMNumber)";
+
+                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
+                    {
+                        SqlParameter p_containerStatusId = new SqlParameter("@ContainerStatusId", SqlDbType.Int);
+                        p_containerStatusId.Value = ++last_container_status_id;
+                        cmd.Parameters.Add(p_containerStatusId);
+
+                        SqlParameter p_locationId = new SqlParameter("@LocationId", SqlDbType.Int);
+                        p_locationId.Value = location_id;
+                        cmd.Parameters.Add(p_locationId);
+
+                        SqlParameter p_containerId = new SqlParameter("@ContainerId", SqlDbType.Int);
+                        p_containerId.Value = container_id;
+                        cmd.Parameters.Add(p_containerId);
+
+                        SqlParameter p_statusGroupId = new SqlParameter("@StatusGroupId", SqlDbType.Int);
+                        p_statusGroupId.Value = status_group_id;
+                        cmd.Parameters.Add(p_statusGroupId);
+
+                        SqlParameter p_statusMessageId = new SqlParameter("@StatusMessageId", SqlDbType.Int);
+                        p_statusMessageId.Value = code;
+                        cmd.Parameters.Add(p_statusMessageId);
+
+                        SqlParameter p_date = new SqlParameter("@Date", SqlDbType.DateTime);
+                        p_date.Value = date;
+                        cmd.Parameters.Add(p_date);
+
+                        SqlParameter p_gsmNumber = new SqlParameter("@GSMNumber", SqlDbType.VarChar);
+                        p_gsmNumber.Value = gsm_number;
+                        cmd.Parameters.Add(p_gsmNumber);
+
+                        // store it
+                        if (cmd.ExecuteNonQuery() != 1)
+                        {
+                            LogFile.WriteErrorToLogFile("ContainerID {0}: Error while excuting sql statement: {1}", container_id, sqlStatement);
+                            retval = false;
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                LogFile.WriteErrorToLogFile("ContainerID {0}: Exception: {1} while trying to store container status item.", container_id, e.Message);
                 retval = false;
             }
             finally
