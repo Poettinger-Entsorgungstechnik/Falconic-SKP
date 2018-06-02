@@ -33,16 +33,21 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Mailjet.Client">
-      <HintPath>..\Assemblies\Mailjet.Client.dll</HintPath>
+      <HintPath>..\Mailjet.Client.dll</HintPath>
     </Reference>
-    <Reference Include="Newtonsoft.Json, Version=10.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
-      <HintPath>..\packages\Newtonsoft.Json.10.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
+    <Reference Include="Microsoft.Rest.ClientRuntime, Version=2.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <HintPath>..\..\packages\Microsoft.Rest.ClientRuntime.2.3.11\lib\net452\Microsoft.Rest.ClientRuntime.dll</HintPath>
+    </Reference>
+    <Reference Include="Newtonsoft.Json, Version=6.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Configuration.Install" />
     <Reference Include="System.Core" />
     <Reference Include="System.Data.Entity" />
     <Reference Include="System.Management" />
+    <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
@@ -51,13 +56,34 @@
     <Reference Include="System.ServiceProcess" />
     <Reference Include="System.Xml" />
     <Reference Include="weitblick.AlertingControl">
-      <HintPath>..\Assemblies\weitblick.AlertingControl.dll</HintPath>
+      <HintPath>..\weitblick.AlertingControl.dll</HintPath>
     </Reference>
     <Reference Include="Weitblick.Base">
-      <HintPath>..\Assemblies\Weitblick.Base.dll</HintPath>
+      <HintPath>..\Weitblick.Base.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="ApiClient\ISkpAPIv10.cs" />
+    <Compile Include="ApiClient\Models\ContainerParamsDto.cs" />
+    <Compile Include="ApiClient\Models\GetSkpLocations.cs" />
+    <Compile Include="ApiClient\Models\LastCommunicationResult.cs" />
+    <Compile Include="ApiClient\Models\LocationParamsDto.cs" />
+    <Compile Include="ApiClient\Models\LocationTypeDto.cs" />
+    <Compile Include="ApiClient\Models\NotificationContactDto.cs" />
+    <Compile Include="ApiClient\Models\OperatorParamsDto.cs" />
+    <Compile Include="ApiClient\Models\SkpContactMethod.cs" />
+    <Compile Include="ApiClient\Models\SkpContainerDto.cs" />
+    <Compile Include="ApiClient\Models\SkpLocationDto.cs" />
+    <Compile Include="ApiClient\Models\SkpStatusTypeDto.cs" />
+    <Compile Include="ApiClient\Models\StatusTypeIdsModel.cs" />
+    <Compile Include="ApiClient\Models\StoreContainerStatus.cs" />
+    <Compile Include="ApiClient\Models\UpdateContainer.cs" />
+    <Compile Include="ApiClient\Models\UpdateGeoPosition.cs" />
+    <Compile Include="ApiClient\Models\UpdateLastCommunication.cs" />
+    <Compile Include="ApiClient\Models\UpdateReadWritePointer.cs" />
+    <Compile Include="ApiClient\SkpAPIv10.cs" />
+    <Compile Include="ApiClient\SkpAPIv10Extensions.cs" />
+    <Compile Include="ApiKeyDelegatingHandler.cs" />
     <Compile Include="ConnectionControl.cs" />
     <Compile Include="ConnectionControlService.cs">
       <SubType>Component</SubType>

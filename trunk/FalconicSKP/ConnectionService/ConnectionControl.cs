@@ -20,6 +20,9 @@ using System.Threading.Tasks;
 using System.Globalization;
 using System.Security.Cryptography;
 
+using Falconic.Skp.Api.Client;
+using Falconic.Skp.Api.Client.Models;
+
 namespace ConnectionService
 {
     [Serializable]
@@ -27,7 +30,15 @@ namespace ConnectionService
     {
         #region constants
 
-        public const string DB_CONNECTION_STRING = "Data Source=172.22.103.8;Initial Catalog=WIP;Pooling=True;Persist Security Info=False;User Id=sa;Password=Ikopsql01";
+        #endregion
+
+        #region static objects
+
+        static string _apiId = "d760404a-5ad1-4227-b885-62c5dff69368";
+        static string _apiKey = "31w0XJzAVP3P6IeyoFNZxYF2Ll8UVmdeo/WeiVq5AMY=";
+        static string _apiUrl = "https://falconic-skp-api-dev.azurewebsites.net";
+
+        public static ISkpAPIv10 SkpApiClient = new SkpAPIv10(new Uri(_apiUrl), new ApiKeyDelegatingHandler(_apiId, _apiKey));
 
         #endregion
 
@@ -37,7 +48,7 @@ namespace ConnectionService
         private Mutex _emailMutex = new Mutex();
         private DateTime _tLastLocationCheck = DateTime.Now.Subtract(new TimeSpan(0,1,0,0,0));
         private Hashtable _lastMonitoringMessage = new Hashtable();
-
+ 
         #endregion
 
         #region Properties
@@ -126,18 +137,49 @@ namespace ConnectionService
             }
         }
 
-        public static void DoAlerting(int locationId, uint type, string smsMessage, string emailMessage, string subject)
+        public static void DoAlerting(int containerId, uint type, string smsMessage, string emailMessage, string subject)
         {
             ArrayList users = new ArrayList();
 
             // different lists for full messages
             if (type == 1 || type == 2)
             {
-                Location.GetFullContainerUsers(locationId, ref users);
+                foreach (var notification in ConnectionControl.SkpApiClient.GetNotificationContacts(containerId, new StatusTypeIdsModel(new List<int?> { 2, 3 })))
+                {
+                    AlertingUser user = new AlertingUser();
+
+                    if (notification.ContactMethod == SkpContactMethod.Email)
+                    {
+                        user.Flags |= (int)ALERTING_FLAGS.EMAIL_ENABLED;
+                        user.EmailAddress = notification.Contact;
+                    }
+                    else
+                    {
+                        user.Flags |= (int)ALERTING_FLAGS.SMS_ENABLED;
+                        user.TelephoneNumber = notification.Contact;
+                    }
+                    users.Add(user);
+                }
             }
             else
             {
-                Location.GetAlertingUsers(locationId, ref users);
+                foreach (var notification in ConnectionControl.SkpApiClient.GetNotificationContacts(containerId, new StatusTypeIdsModel(new List<int?> { 11 })))
+                {
+                    AlertingUser user = new AlertingUser();
+
+                    if (notification.ContactMethod == SkpContactMethod.Email)
+                    {
+                        user.Flags |= (int)ALERTING_FLAGS.EMAIL_ENABLED;
+                        user.EmailAddress = notification.Contact;
+                    }
+                    else
+                    {
+                        user.Flags |= (int)ALERTING_FLAGS.SMS_ENABLED;
+                        user.TelephoneNumber = notification.Contact;
+                    }
+
+                    users.Add(user);
+                }
             }
 
             for (int j = 0; j < users.Count; j++)
@@ -234,6 +276,7 @@ namespace ConnectionService
         }
 
 
+#if false
         private void LocationMonitoring()
         {
             TimeSpan ts = DateTime.Now.Subtract(_tLastLocationCheck);
@@ -385,7 +428,7 @@ namespace ConnectionService
 
             }
         }
-
+#endif
 
         /// <summary>
         /// Do the service's job
@@ -398,7 +441,7 @@ namespace ConnectionService
 
             try
             {
-                tcpl = new TcpListener(IPAddress.Any, 849);
+                tcpl = new TcpListener(IPAddress.Any, 820);
                 tcpl.Start();
 
                 try
@@ -426,7 +469,7 @@ namespace ConnectionService
                             conn.Start();
                         }
 
-                        LocationMonitoring();
+//                        LocationMonitoring();
 
                         Thread.Sleep(10);
 
@@ -459,7 +502,7 @@ namespace ConnectionService
             }
         }
 
-        #endregion
+#endregion
     }
 
     [Serializable]
@@ -473,7 +516,7 @@ namespace ConnectionService
         private string _emailAddress;           // email address of alerted person
         private int _flags;                     // different alerting options (SMS,EMAIL,SPEECH)
 
-        #endregion
+#endregion
 
         #region properties
 
@@ -515,7 +558,7 @@ namespace ConnectionService
 
         public int Id { get => _id; set => _id = value; }
 
-        #endregion
+#endregion
     }
 
     /// <summary>
@@ -538,20 +581,20 @@ namespace ConnectionService
         private string _firmwareVersion;            // firmwareversion which should be installed
         private int _numberOfStoredEvents;          
 
-        #endregion
+#endregion
 
         #region Objects Members
 
-        private string _modemFirmwareVersion;       // modem firmware version string
-        private string _controllerFirmwareVersion;  // controller firmware version string
-        private int _ModemSignalQuality;            // controller signal quality information
-        private int _actualFillingLevel;            // actual calculated filling level
-        private int _supplyVoltage;                 // actual supply voltage value (raw value)
-        private DbGeography _location;              // gps coordinates where container is located
-        private DateTime _tLastCommunication;       // time of last transaction
-        private int _journalSize = 0;              // max num entries in journal  
-        private int _writePointer = 0;             // actual write pointer of journal
-        private int _readPointer = 0;              // actual read pointer of journal
+                private string _modemFirmwareVersion;       // modem firmware version string
+                private string _controllerFirmwareVersion;  // controller firmware version string
+                private int _ModemSignalQuality;            // controller signal quality information
+                private int _actualFillingLevel;            // actual calculated filling level
+                private int _supplyVoltage;                 // actual supply voltage value (raw value)
+                private DbGeography _location;              // gps coordinates where container is located
+                private DateTime _tLastCommunication;       // time of last transaction
+                private int _journalSize = 0;              // max num entries in journal  
+                private int _writePointer = 0;             // actual write pointer of journal
+                private int _readPointer = 0;              // actual read pointer of journal
 
         #endregion
 
@@ -580,7 +623,7 @@ namespace ConnectionService
         public int ReadPointer { get => _readPointer; set => _readPointer = value; }
         public int JournalSize { get => _journalSize; set => _journalSize = value; }
 
-        #endregion
+#endregion
 
         #region Constructor
 
@@ -591,7 +634,7 @@ namespace ConnectionService
             ControllerFirmwareVersion = "unknown";
         }
 
-        #endregion
+#endregion
     }
 
     [Serializable]
@@ -618,7 +661,7 @@ namespace ConnectionService
         private int _WatchdogDuration;
         private bool _bValid;                       // is location valid (operatorId =)
 
-        #endregion
+#endregion
 
         #region properties
 
@@ -641,7 +684,7 @@ namespace ConnectionService
         public int LocationGroupId { get => _locationGroupId; set => _locationGroupId = value; }
         public bool IsValid { get => _bValid; set => _bValid = value; }
 
-        #endregion
+#endregion
 
         #region constructor
 
@@ -655,129 +698,7 @@ namespace ConnectionService
             LocationId = 0;
             _pressPosition = false;
         }
-        #endregion
-
-        #region static methods
-
-        public static bool GetFullContainerUsers(int location_id, ref ArrayList users)
-        {
-            string sqlStatement = "SELECT REMOTE_CONTROL.REMOTE_CONTROL_ID, REMOTE_CONTROL_TYPE_ID, MEMO, CONTACT FROM REMOTE_CONTROL INNER JOIN FULL_CONTAINER ON REMOTE_CONTROL.REMOTE_CONTROL_ID=FULL_CONTAINER.REMOTE_CONTROL_ID WHERE FULL_CONTAINER.LOCATION_ID=@LocationId";
-
-            bool retval = true;
-
-            try
-            {
-                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
-                {
-                    sqlConnection.Open();
-
-                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
-                    {
-                        SqlParameter p_locationId = new SqlParameter("@LocationId", SqlDbType.Int);
-                        p_locationId.Value = location_id;
-
-                        cmd.Parameters.Add(p_locationId);
-
-                        using (SqlDataReader reader = cmd.ExecuteReader())
-                        {
-                            while (reader.Read())
-                            {
-                                AlertingUser user = new AlertingUser();
-                                user.Id = (int)reader[0];
-                                int type = (int)reader[1];
-
-                                user.Name = (string)reader[2];
-
-                                if (type == 2)  // email
-                                {
-                                    user.Flags = (int)ALERTING_FLAGS.EMAIL_ENABLED;
-                                    user.EmailAddress = (string)reader[3];
-                                }
-                                else if (type == 3) // sms
-                                {
-                                    user.Flags = (int)ALERTING_FLAGS.SMS_ENABLED;
-                                    user.TelephoneNumber = (string)reader[3];
-                                }
-
-                                users.Add(user);
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception e)
-            {
-                LogFile.WriteErrorToLogFile("{0} in \'GetFullContainerUsers\' appeared.", e.Message);
-                retval = false;
-            }
-            finally
-            {
-            }
-
-            return retval;
-        }
-
-        public static bool GetAlertingUsers(int location_id, ref ArrayList users)
-        {
-            string sqlStatement = "SELECT REMOTE_CONTROL.REMOTE_CONTROL_ID, REMOTE_CONTROL_TYPE_ID, MEMO, CONTACT FROM REMOTE_CONTROL INNER JOIN ERROR ON REMOTE_CONTROL.REMOTE_CONTROL_ID=ERROR.REMOTE_CONTROL_ID WHERE ERROR.LOCATION_ID=@LocationId";
-
-            bool retval = true;
-
-            try
-            {
-                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
-                {
-                    sqlConnection.Open();
-
-                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
-                    {
-                        SqlParameter p_locationId = new SqlParameter("@LocationId", SqlDbType.Int);
-                        p_locationId.Value = location_id;
-
-                        cmd.Parameters.Add(p_locationId);
-
-                        using (SqlDataReader reader = cmd.ExecuteReader())
-                        {
-                            while (reader.Read())
-                            {
-                                AlertingUser user = new AlertingUser();
-                                user.Id = (int)reader[0];
-                                int type = (int)reader[1];
-
-                                user.Name = (string)reader[2];
-
-                                if (type == 2)  // email
-                                {
-                                    user.Flags = (int)ALERTING_FLAGS.EMAIL_ENABLED;
-                                    user.EmailAddress = (string)reader[3];
-                                }
-                                else if (type == 3) // sms
-                                {
-                                    user.Flags = (int)ALERTING_FLAGS.SMS_ENABLED;
-                                    user.TelephoneNumber = (string)reader[3];
-                                }
-
-                                users.Add(user);
-                            }
-                        }
-                    }
-
-                    sqlConnection.Close();
-                }
-            }
-            catch (Exception e)
-            {
-                LogFile.WriteErrorToLogFile("{0} in \'GetAlertingUsers\' appeared.", e.Message);
-                retval = false;
-            }
-            finally
-            {
-            }
-
-            return retval;
-        }
-
-        #endregion
+#endregion
     }
 
     /// <summary>
@@ -801,7 +722,7 @@ namespace ConnectionService
             ERROR
         }
 
-        #endregion
+#endregion
 
         #region Members
 
@@ -840,7 +761,7 @@ namespace ConnectionService
         [NonSerialized]
         int _keepAliveInterval = 5;
 
-        #endregion
+#endregion
 
         #region Overrides
 
@@ -853,7 +774,7 @@ namespace ConnectionService
             return null;
         }
 
-        #endregion
+#endregion
 
         #region Properties
 
@@ -928,19 +849,19 @@ namespace ConnectionService
 
         public string Name { get => _name; set => _name = value; }
 
-        #endregion
+#endregion
 
         #region Public methods
 
-        #region constructor
+#region constructor
 
         public ClientConnection()
         {
         }
 
-        #endregion
+#endregion
 
-        #region start & stop
+#region start & stop
 
         public void Start()
         {
@@ -960,9 +881,9 @@ namespace ConnectionService
             _stopHandle.Set();
         }
 
-        #endregion
+#endregion
 
-        #endregion
+#endregion
 
         #region Helpers
 
@@ -973,7 +894,25 @@ namespace ConnectionService
             return epoch.AddSeconds(unixTime);
         }
 
-        #region AreaCode
+        private string GetMaterialName(int materialId)
+        {
+            if (materialId == 1)
+                return "Gewerbemüll";
+            else if (materialId == 2)
+                return "Karton";
+            else if (materialId == 3)
+                return "Kunststoff";
+            else if (materialId == 4)
+                return "Mischpapier";
+            else if (materialId == 5)
+                return "Mischfolie";
+            else if (materialId == 6)
+                return "Gemischte Siedlungsabfälle";
+            else
+                return "Nicht bekannt";
+        }
+
+#region AreaCode
 
         private bool checkAreaCode(string phoneNumber, ref bool isDrei)
         {
@@ -1230,7 +1169,7 @@ namespace ConnectionService
             return false;
         }
 
-        #endregion
+#endregion
 
         private bool analyseStatus(string frame)
         {
@@ -1377,12 +1316,14 @@ namespace ConnectionService
                             // transactions with no customer number are normal container status messages
                             if (Convert.ToInt32(customerNumber) == 0)
                             {
-                                StoreContainerStatus(_container.ContainerId, _location.LocationId, _container.MobileNumber, transactionStatusId, date);
+                                StoreContainerStatus containerStatus = new StoreContainerStatus(_container.IccId, transactionStatusId, date, locationId);
+                                ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, containerStatus);
                                 continue;
                             }
                         }
                         catch (Exception) { };
 
+#if false
                         // update transaction count in container table
                         if (!IncrementContainerTransactionCounter(_container.ContainerId))
                         {
@@ -1423,7 +1364,7 @@ namespace ConnectionService
                             LogFile.WriteErrorToLogFile("{0} ParseJournalEntries, error while storing transaction!", this.Name);
                             continue;
                         }
-
+#endif
                     }
                     catch (Exception excp)
                     {
@@ -1460,7 +1401,19 @@ namespace ConnectionService
 
                         LogFile.WriteMessageToLogFile("Event with type: {0} and time: {1}", type, time);
 
-                        if (type < 256) // Event with alerting enabled
+                        if (type == 1)
+                        {
+                            // emptying
+                            StoreContainerStatus containerStatus = new StoreContainerStatus(_container.IccId, 10, DateTime.Now, _location.LocationId, 1, 0);
+                            ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, containerStatus);
+                        }
+                        else if (type == 10)
+                        {
+                            // error has gone
+                            StoreContainerStatus containerStatus = new StoreContainerStatus(_container.IccId, 0, DateTime.Now, _location.LocationId, 10, _container.ActualFillingLevel);
+                            ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, containerStatus);
+                        }
+                        else if (type < 256) // Event with alerting enabled
                         {
 
                             string message = "Meldung: ";
@@ -1469,24 +1422,38 @@ namespace ConnectionService
                             {
                                 message += "HAUPTSCHALTER EIN";
                             }
-                            else if (type == 1) // Nearly full Event
+                            else if (type == 2) // Nearly full Event
                             {
+                                // nearly full
+                                StoreContainerStatus containerStatus = new StoreContainerStatus(_container.IccId, 40, DateTime.Now, _location.LocationId, (int)type, _container.ActualFillingLevel);
+                                ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, containerStatus);
                                 message += "VOR VOLL " + String.Format("( {0} % )", _location.FullWarningLevel);
                             }
-                            else if (type == 2) // Full Event
+                            else if (type == 3) // Full Event
                             {
+                                // full
+                                StoreContainerStatus containerStatus = new StoreContainerStatus(_container.IccId, 3510, DateTime.Now, _location.LocationId, (int)type, _container.ActualFillingLevel);
+                                ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, containerStatus);
                                 message += "VOLL";
                             }
-                            else if (type == 3) // Emergency stop
+                            else if (type == 4) // Emergency stop
                             {
+                                StoreContainerStatus containerStatus = new StoreContainerStatus(_container.IccId, 4, DateTime.Now, _location.LocationId, 11, _container.ActualFillingLevel);
+                                ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, containerStatus);
+
                                 message += "NOTHALT";
                             }
-                            else if (type == 4) // Motorschutz
+                            else if (type == 5) // Motorschutz
                             {
+                                StoreContainerStatus containerStatus = new StoreContainerStatus(_container.IccId, 5, DateTime.Now, _location.LocationId, 11, _container.ActualFillingLevel);
+                                ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, containerStatus);
                                 message += "MOTORSCHUTZ";
                             }
-                            else if (type == 5) // Störung
+                            else if (type == 6) // Störung
                             {
+                                StoreContainerStatus containerStatus = new StoreContainerStatus(_container.IccId, 6, DateTime.Now, _location.LocationId, 11, _container.ActualFillingLevel);
+                                ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, containerStatus);
+
                                 message += "STOERUNG";
                             }
 
@@ -1505,12 +1472,9 @@ namespace ConnectionService
                             double lat = (double)_location.Latitude;
                             double lng = (double)_location.Longitude;
 
-                            emailMessage += "https://www.entsorgungstechnik.com/Standorte/Infomap?locationid=" + _location.LocationId.ToString() + "&code=";
-                            emailMessage += _location.StrHash + "\n";
-
                             LogFile.WriteMessageToLogFile("Alertingmessage: {0}", emailMessage);
 
-                            ConnectionControl.DoAlerting(_location.LocationId, type, smsMessage, emailMessage, subject);
+                            ConnectionControl.DoAlerting(_container.ContainerId, type, smsMessage, emailMessage, subject);
                         }
                         else  // Non error event
                         {
@@ -1655,686 +1619,6 @@ namespace ConnectionService
 
         #region Database methods
 
-        public bool UpdateCustomersPositiveCreditBalance(int customerId, decimal positiveCreditBalance)
-        {
-            string sqlStatement = "UPDATE CUSTOMER SET POSITIVE_CREDIT_BALANCE = @PositiveCreditBalance WHERE CUSTOMER_ID=@CustomerId";
-            bool retval = true;
-
-            try
-            {
-                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
-                {
-                    sqlConnection.Open();
-
-                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
-                    {
-                        SqlParameter p_posCredBalance = new SqlParameter("@PositiveCreditBalance", SqlDbType.Decimal);
-                        p_posCredBalance.Value = positiveCreditBalance;
-                        cmd.Parameters.Add(p_posCredBalance);
-
-                        SqlParameter p_customerId = new SqlParameter("@CustomerId", SqlDbType.Int);
-                        p_customerId.Value = customerId;
-                        cmd.Parameters.Add(p_customerId);
-
-                        if (cmd.ExecuteNonQuery() != 1)
-                        {
-                            LogFile.WriteErrorToLogFile("Error while trying to store customers (id={0}) positive credit balance", customerId);
-                            retval = false;
-                        }
-                    }
-                }
-            }
-            catch (Exception e)
-            {
-                LogFile.WriteErrorToLogFile("Exception: {0} in \'UpdateCustomersPositiveCreditBalance\' appeared.", e.Message);
-                retval = false;
-            }
-            finally
-            {
-            }
-
-            return retval;
-        }
-
-        public bool UpdateCustomerLastWasteDisposal(int customer_id, DateTime date)
-        {
-            string sqlStatement = "UPDATE CUSTOMER SET LAST_WASTE_DISPOSAL = @DateLastDisposal WHERE CUSTOMER_ID=@CustomerId";
-            bool retval = true;
-
-            try
-            {
-                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
-                {
-                    sqlConnection.Open();
-
-                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
-                    {
-                        SqlParameter p_date = new SqlParameter("@DateLastDisposal", SqlDbType.DateTime);
-                        p_date.Value = date;
-                        cmd.Parameters.Add(p_date);
-
-                        SqlParameter p_customerId = new SqlParameter("@CustomerId", SqlDbType.Int);
-                        p_customerId.Value = customer_id;
-                        cmd.Parameters.Add(p_customerId);
-
-                        if (cmd.ExecuteNonQuery() != 1)
-                        {
-                            LogFile.WriteErrorToLogFile("Error while trying to store customers (id={0}), last waste disposal time stamp {1}", customer_id, date);
-                            retval = false;
-                        }
-                    }
-                }
-            }
-            catch (Exception e)
-            {
-                LogFile.WriteErrorToLogFile("Exception: {0} in \'UpdateCustomerLastWasteDisposal\' appeared.", e.Message);
-                retval = false;
-            }
-            finally
-            {
-            }
-
-            return retval;
-        }
-
-        public bool GetCustomerData(string customerNumber, int operatorId, ref int customerId, ref int cardTypeId, ref string languageCode)
-        {
-            string sqlStatement = "SELECT CUSTOMER_ID, CARD_TYPE_ID, LANGUAGE_CODE FROM CUSTOMER WHERE CUSTOMER_NUMBER=@CustomerNumber AND OPERATOR_ID=@OperatorId";
-            bool retval = true;
-
-            try
-            {
-                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
-                {
-                    sqlConnection.Open();
-
-                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
-                    {
-                        SqlParameter p_customerNumber = new SqlParameter("@CustomerNumber", SqlDbType.VarChar);
-                        p_customerNumber.Value = customerNumber;
-
-                        cmd.Parameters.Add(p_customerNumber);
-
-                        SqlParameter p_operatorId = new SqlParameter("@OperatorId", SqlDbType.Int);
-                        p_operatorId.Value = operatorId;
-
-                        cmd.Parameters.Add(p_operatorId);
-
-                        using (SqlDataReader reader = cmd.ExecuteReader())
-                        {
-                            if (reader.Read())
-                            {
-                                customerId = (int)reader[0];
-                                cardTypeId = (int)reader[1];
-                                languageCode = (string)reader[2];
-                            }
-                            else
-                            {
-                                LogFile.WriteErrorToLogFile("{0} No customer with customer number: {1} found for operator: {2}", this.Name, customerNumber, operatorId);
-                                return false;
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception e)
-            {
-                LogFile.WriteErrorToLogFile("{0} in \'GetCustomerData\' appeared.", e.Message);
-                retval = false;
-            }
-            finally
-            {
-            }
-
-            return retval;
-        }
-
-        public bool IncrementContainerTransactionCounter(int container_id)
-        {
-            string sqlStatement = "SELECT TRANSACTION_COUNT FROM CONTAINER WHERE CONTAINER_ID=@ContainerId";
-            bool retval = true;
-            int transaction_counter = 0;
-
-            try
-            {
-                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
-                {
-                    sqlConnection.Open();
-
-                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
-                    {
-                        SqlParameter p_containerId = new SqlParameter("@ContainerId", SqlDbType.Int);
-                        p_containerId.Value = container_id;
-                        cmd.Parameters.Add(p_containerId);
-
-                        using (SqlDataReader reader = cmd.ExecuteReader())
-                        {
-                            if (reader.Read())
-                            {
-                                transaction_counter = (int)reader[0];
-                            }
-                            else
-                            {
-                                LogFile.WriteErrorToLogFile("ContainerID {0}: IncrementTransactionCounter, Cannot access field TRANSACTION_COUNT", container_id);
-                            }
-                        }
-                    }
-
-                    using (SqlCommand cmd_update = new SqlCommand("UPDATE CONTAINER SET TRANSACTION_COUNT=@TransactionCount WHERE CONTAINER_ID=@ContainerId", sqlConnection))
-                    {
-                        SqlParameter p_trans_count = new SqlParameter("@TransactionCount", SqlDbType.Int);
-                        p_trans_count.Value = ++transaction_counter;
-
-                        SqlParameter p_contID = new SqlParameter("@ContainerId", SqlDbType.Int);
-                        p_contID.Value = container_id;
-
-                        cmd_update.Parameters.Add(p_trans_count);
-                        cmd_update.Parameters.Add(p_contID);
-
-                        if (cmd_update.ExecuteNonQuery() != 1)
-                        {
-                            LogFile.WriteErrorToLogFile("ContainerID {0}: Error while trying to update transaction counter", container_id);
-                        }
-                    }
-                }
-            }
-            catch (Exception e)
-            {
-                LogFile.WriteErrorToLogFile("Exception: {0} in \'GetMaxTransactionId\' appeared.", e.Message);
-                retval = false;
-            }
-            finally
-            {
-            }
-
-            return retval;
-        }
-
-        public bool StoreTransaction(int containerId, DateTime date, int customerId, int transStatusId, int weight, int duration, int amount)
-        {
-            bool retval = true;
-            int lastTransId = 0;
-
-            try
-            {
-                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
-                {
-                    sqlConnection.Open();
-
-                    // first get max transaction id
-                    string sqlStatement = "SELECT MAX(TRANSACTION_ID) AS MAX_TRANSACTION_ID FROM TRANSACTIONS";
-
-                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
-                    {
-                        using (SqlDataReader reader = cmd.ExecuteReader())
-                        {
-                            if (reader.Read())
-                            {
-                                lastTransId = (int)reader[0];
-                            }
-                        }
-                    }
-
-                    // store transactions in database
-                    sqlStatement = "INSERT INTO TRANSACTIONS ([TRANSACTION_ID], [CUSTOMER_ID], [TRANSACTION_STATUS_ID], [LOCATION_ID], [DATE], [WEIGHT], [DURATION], [AMOUNT], [CONTAINER_ID], [GSM_NUMBER], [POSITIVE_CREDIT_BALANCE]) VALUES (@TransactionId, @CustomerId, @TransactionStatusId, @LocationId, @Date, @Weight, @Duration, @Amount, @ContainerId, @GSMNumber, @PositiveCreditBalance)";
-                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
-                    {
-                        SqlParameter p_transId = new SqlParameter("@TransactionId", SqlDbType.Int);
-                        p_transId.Value = ++lastTransId;
-                        cmd.Parameters.Add(p_transId);
-
-                        SqlParameter p_customerId = new SqlParameter("@CustomerId", SqlDbType.Int);
-                        p_customerId.Value = customerId;
-                        cmd.Parameters.Add(p_customerId);
-
-                        SqlParameter p_transactionStatusId = new SqlParameter("@TransactionStatusId", SqlDbType.Int);
-                        p_transactionStatusId.Value = transStatusId;
-                        cmd.Parameters.Add(p_transactionStatusId);
-
-                        SqlParameter p_locationId = new SqlParameter("@LocationId", SqlDbType.Int);
-                        p_locationId.Value = this._location.LocationId;
-                        cmd.Parameters.Add(p_locationId);
-
-                        SqlParameter p_date = new SqlParameter("@Date", SqlDbType.DateTime);
-                        p_date.Value = date;
-                        cmd.Parameters.Add(p_date);
-
-                        SqlParameter p_weight = new SqlParameter("@Weight", SqlDbType.Int);
-                        p_weight.Value = weight;
-                        cmd.Parameters.Add(p_weight);
-
-                        SqlParameter p_duration = new SqlParameter("@Duration", SqlDbType.Int);
-                        p_duration.Value = duration;
-                        cmd.Parameters.Add(p_duration);
-
-                        SqlParameter p_amount = new SqlParameter("@Amount", SqlDbType.Int);
-                        p_amount.Value = amount;
-                        cmd.Parameters.Add(p_amount);
-
-                        SqlParameter p_containerId = new SqlParameter("@ContainerId", SqlDbType.Int);
-                        p_containerId.Value = containerId;
-                        cmd.Parameters.Add(p_containerId);
-
-                        SqlParameter p_gsmNumber = new SqlParameter("@GSMNumber", SqlDbType.VarChar);
-                        p_gsmNumber.Value = "-";
-                        cmd.Parameters.Add(p_gsmNumber);
-
-                        SqlParameter p_positiveCreditBalance = new SqlParameter("@PositiveCreditBalance", SqlDbType.Int);
-                        p_positiveCreditBalance.Value = 0;
-                        cmd.Parameters.Add(p_positiveCreditBalance);
-
-                        // store it
-                        if (cmd.ExecuteNonQuery() != 1)
-                        {
-                            LogFile.WriteErrorToLogFile("Error while excuting sql statement: {0}", sqlStatement);
-                            retval = false;
-                        }
-                    }
-                }
-            }
-            catch (Exception e)
-            {
-                LogFile.WriteErrorToLogFile("Exception: {0} in \'StoreTransaction\' appeared.", e.Message);
-                retval = false;
-            }
-            finally
-            {
-            }
-
-            return retval;
-        }
-
-        public bool StoreContainerStatus(int container_id, int location_id, string gsm_number, int code, DateTime date)
-        {
-            bool retval = true;
-
-            try
-            {
-                int status_group_id = (code < 1000) ? code : (code / 1000) * 1000;
-                int last_container_status_id = 0;
-
-                // first get max container status id
-                string sqlStatement = "SELECT MAX(CONTAINER_STATUS_ID) AS MAX_CONTAINERSTATUS_ID FROM CONTAINER_STATUS";
-
-                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
-                {
-                    sqlConnection.Open();
-
-                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
-                    {
-                        using (SqlDataReader reader = cmd.ExecuteReader())
-                        {
-                            if (reader.Read())
-                            {
-                                last_container_status_id = (int)reader[0];
-                            }
-                        }
-                    }
-
-                    sqlStatement = "INSERT INTO CONTAINER_STATUS ([CONTAINER_STATUS_ID], [LOCATION_ID], [CONTAINER_ID], [STATUS_GROUP_ID], [STATUS_MESSAGE_ID], [DATE], [GSM_NUMBER]) VALUES (@ContainerStatusId, @LocationId, @ContainerId, @StatusGroupId, @StatusMessageId, @Date, @GSMNumber)";
-
-                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
-                    {
-                        SqlParameter p_containerStatusId = new SqlParameter("@ContainerStatusId", SqlDbType.Int);
-                        p_containerStatusId.Value = ++last_container_status_id;
-                        cmd.Parameters.Add(p_containerStatusId);
-
-                        SqlParameter p_locationId = new SqlParameter("@LocationId", SqlDbType.Int);
-                        p_locationId.Value = location_id;
-                        cmd.Parameters.Add(p_locationId);
-
-                        SqlParameter p_containerId = new SqlParameter("@ContainerId", SqlDbType.Int);
-                        p_containerId.Value = container_id;
-                        cmd.Parameters.Add(p_containerId);
-
-                        SqlParameter p_statusGroupId = new SqlParameter("@StatusGroupId", SqlDbType.Int);
-                        p_statusGroupId.Value = status_group_id;
-                        cmd.Parameters.Add(p_statusGroupId);
-
-                        SqlParameter p_statusMessageId = new SqlParameter("@StatusMessageId", SqlDbType.Int);
-                        p_statusMessageId.Value = code;
-                        cmd.Parameters.Add(p_statusMessageId);
-
-                        SqlParameter p_date = new SqlParameter("@Date", SqlDbType.DateTime);
-                        p_date.Value = date;
-                        cmd.Parameters.Add(p_date);
-
-                        SqlParameter p_gsmNumber = new SqlParameter("@GSMNumber", SqlDbType.VarChar);
-                        p_gsmNumber.Value = gsm_number;
-                        cmd.Parameters.Add(p_gsmNumber);
-
-                        // store it
-                        if (cmd.ExecuteNonQuery() != 1)
-                        {
-                            LogFile.WriteErrorToLogFile("ContainerID {0}: Error while excuting sql statement: {1}", container_id, sqlStatement);
-                            retval = false;
-                        }
-                    }
-                }
-            }
-            catch (Exception e)
-            {
-                LogFile.WriteErrorToLogFile("ContainerID {0}: Exception: {1} while trying to store container status item.", container_id, e.Message);
-                retval = false;
-            }
-            finally
-            {
-            }
-
-            return retval;
-        }
-
-        public bool RemoveContainerFromLocations(int container_id)
-        {
-            string sqlStatement = "SELECT LOCATION_ID FROM LOCATION WHERE CONTAINER_ID=@ContainerId";
-            List<int> locations = new List<int>();
-            bool retval = true;
-
-            try
-            {
-                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
-                {
-                    sqlConnection.Open();
-
-                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
-                    {
-                        SqlParameter p_containerId = new SqlParameter("@ContainerId", SqlDbType.Int);
-                        p_containerId.Value = container_id;
-                        cmd.Parameters.Add(p_containerId);
-
-                        using (SqlDataReader reader = cmd.ExecuteReader())
-                        {
-                            while (reader.Read())
-                            {
-                                int locId = (int)reader[0];
-
-                                LogFile.WriteMessageToLogFile("{0} Found ContainerId ({1}) on Location ({2})", this.Name, container_id, locId);
-                                locations.Add(locId);
-                            }
-
-                            reader.Close();
-                        }
-                    }
-
-                    foreach (int loc in locations)
-                    {
-                        using (SqlCommand cmd = new SqlCommand("UPDATE LOCATION SET CONTAINER_ID=@ContainerId WHERE LOCATION_ID=@LocationId", sqlConnection))
-                        {
-                            SqlParameter p_containerId = new SqlParameter("@ContainerId", SqlDbType.Int);
-                            p_containerId.Value = 0;
-                            cmd.Parameters.Add(p_containerId);
-
-                            SqlParameter p_locationId = new SqlParameter("@LocationId", SqlDbType.Int);
-                            p_locationId.Value = loc;
-                            cmd.Parameters.Add(p_locationId);
-
-                            if (cmd.ExecuteNonQuery() != 1)
-                            {
-                                LogFile.WriteErrorToLogFile("{0} Error while trying reset container id ({1}) on location ({2})", this.Name, container_id, loc);
-                                retval = false;
-                            }
-                        }
-                    }
-
-                    sqlConnection.Close();
-                }
-            }
-            catch (Exception e)
-            {
-                LogFile.WriteErrorToLogFile("Exception: {0} in \'RemoveContainerFromLocations\' appeared.", e.Message);
-                retval = false;
-            }
-            finally
-            {
-            }
-
-            return retval;
-        }
-
-        public bool UpdateContainerLastCommunication(int container_id, DateTime date)
-        {
-            string sqlStatement = "UPDATE CONTAINER SET LAST_COMMUNICATION = @LastCommunication WHERE CONTAINER_ID=@ContainerId";
-            bool retval = true;
-
-            try
-            {
-                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
-                {
-                    sqlConnection.Open();
-
-                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
-                    {
-                        SqlParameter p_lastCommunication = new SqlParameter("@LastCommunication", SqlDbType.DateTime);
-                        p_lastCommunication.Value = date;
-                        cmd.Parameters.Add(p_lastCommunication);
-
-                        SqlParameter p_containerId = new SqlParameter("@ContainerId", SqlDbType.Int);
-                        p_containerId.Value = container_id;
-                        cmd.Parameters.Add(p_containerId);
-
-                        if (cmd.ExecuteNonQuery() != 1)
-                        {
-                            LogFile.WriteErrorToLogFile("Error while trying to store last communication date for container (id={0})", container_id);
-                            retval = false;
-                        }
-                    }
-
-                    sqlConnection.Close();
-                }
-            }
-            catch (Exception e)
-            {
-                LogFile.WriteErrorToLogFile("Exception: {0} in \'UpdateContainerLastCommunication\' appeared.", e.Message);
-                retval = false;
-            }
-            finally
-            {
-            }
-
-            return retval;
-        }
-
-        private bool SetMapviewHash(DateTime dueDate)
-        {
-            bool retval = false;
-
-            LogFile.WriteMessageToLogFile("Set mapview hash to: ({0}), DueDate: ({1})", _location.StrHash, dueDate);
-
-            try
-            {
-                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
-                {
-                    sqlConnection.Open();
-
-                    using (SqlCommand cmd_update = new SqlCommand("UPDATE LOCATION SET CONTAINER_ID=@ContainerId, MAPVIEW_HASH=@MapViewHash, MAPVIEW_VALID_TO=@DueDate WHERE LOCATION_ID=@LocationId", sqlConnection))
-                    {
-                        SqlParameter iContainerId = new SqlParameter("@ContainerId", SqlDbType.Int);
-                        iContainerId.Value = _container.ContainerId;
-
-                        SqlParameter strMapViewHash = new SqlParameter("@MapViewHash", SqlDbType.VarChar);
-                        strMapViewHash.Value = _location.StrHash;
-
-                        SqlParameter tDueDate = new SqlParameter("@DueDate", SqlDbType.DateTime);
-                        tDueDate.Value = dueDate;
-
-                        SqlParameter iLocationId = new SqlParameter("@LocationId", SqlDbType.Int);
-                        iLocationId.Value = _location.LocationId;
-
-                        cmd_update.Parameters.Add(iContainerId);
-                        cmd_update.Parameters.Add(strMapViewHash);
-                        cmd_update.Parameters.Add(tDueDate);
-                        cmd_update.Parameters.Add(iLocationId);
-
-                        if (cmd_update.ExecuteNonQuery() != 1)
-                        {
-                            LogFile.WriteErrorToLogFile("ContainerID {0}: Error while trying to map view gash for location: {1}", _container.ContainerId, _location.LocationId);
-                        }
-                        else
-                            retval = true;
-                    }
-
-                    sqlConnection.Close();
-                }
-            }
-            catch (Exception excp)
-            {
-                LogFile.WriteErrorToLogFile("Exception: {0} in \'SetMapviewHash\' appeared.", excp.Message);
-            }
-            finally
-            {
-            }
-
-            return retval;
-        }
-
-
-        private bool GetOperatorParams(int operatorId)
-        {
-            bool retval = false;
-
-            string sqlStatement = "SELECT OPERATOR_NAME1, CURRENCY_ID, LANGUAGE_CODE FROM OPERATOR WHERE OPERATOR_ID=@Operator_Id";
-
-            try
-            {
-
-                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
-                {
-                    sqlConnection.Open();
-
-                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
-                    {
-                        SqlParameter param_opid = new SqlParameter("@Operator_Id", SqlDbType.Int);
-                        param_opid.Value = _container.OperatorId;
-
-                        cmd.Parameters.Add(param_opid);
-
-                        using (SqlDataReader reader = cmd.ExecuteReader())
-                        {
-                            if (reader.Read())
-                            {
-                                _container.OperatorName = (string)reader[0];
-//                                currency_id = (int)reader[1];
-//                                language_code = (string)reader[2];
-                            }
-                            else
-                            {
-                                LogFile.WriteErrorToLogFile("Error while excuting sql statement: {0}", sqlStatement);
-                                retval = false;
-                            }
-
-                            reader.Close();
-                        }
-                    }
-                }
-            }
-            catch (Exception e)
-            {
-                LogFile.WriteErrorToLogFile("{0} in \'GetOperatorParams\' appeared.", e.Message);
-                retval = false;
-            }
-            finally
-            {
-            }
-
-            return retval;
-        }
-
-        private bool GetMaterialName(int materialId)
-        {
-            bool retval = false;
-
-            string sqlStatement = "SELECT LOCATIONTYPE FROM LOCATIONTYPE WHERE LOCATIONTYPE_ID=@LocationTypeId";
-
-            try
-            {
-                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
-                {
-                    sqlConnection.Open();
-
-                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
-                    {
-                        SqlParameter locTypeId = new SqlParameter("@LocationTypeId", SqlDbType.Int);
-                        locTypeId.Value = materialId;
-
-                        cmd.Parameters.Add(locTypeId);
-
-                        using (SqlDataReader reader = cmd.ExecuteReader())
-                        {
-                            if (reader.Read())
-                            {
-                                _location.MaterialName = (string)reader[0];
-                            }
-                            else
-                            {
-                                LogFile.WriteErrorToLogFile("Error while excuting sql statement: {0}", sqlStatement);
-                                retval = false;
-                            }
-
-                            reader.Close();
-                        }
-                    }
-                }
-            }
-            catch (Exception e)
-            {
-                LogFile.WriteErrorToLogFile("{0} in \'GetMaterialName\' appeared.", e.Message);
-                retval = false;
-            }
-            finally
-            {
-            }
-
-            return retval;
-        }
-
-        private bool GetContainerType(int containerTypeId)
-        {
-            bool retval = false;
-
-            string sqlStatement = "SELECT CONTAINER_TYPE FROM CONTAINER_TYPE WHERE CONTAINER_TYPE_ID=@ContainerTypeId";
-
-            try
-            {
-                using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
-                {
-                    sqlConnection.Open();
-
-                    using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
-                    {
-                        SqlParameter contTypeId = new SqlParameter("@ContainerTypeId", SqlDbType.Int);
-                        contTypeId.Value = containerTypeId;
-
-                        cmd.Parameters.Add(contTypeId);
-
-                        using (SqlDataReader reader = cmd.ExecuteReader())
-                        {
-                            if (reader.Read())
-                            {
-                                _container.ContainerType = (string)reader[0];
-                            }
-                            else
-                            {
-                                LogFile.WriteErrorToLogFile("Error while excuting sql statement: {0}", sqlStatement);
-                                retval = false;
-                            }
-
-                            reader.Close();
-                        }
-                    }
-                }
-            }
-            catch (Exception e)
-            {
-                LogFile.WriteErrorToLogFile("{0} in \'GetContainerType\' appeared.", e.Message);
-                retval = false;
-            }
-            finally
-            {
-            }
-
-            return retval;
-        }
-
         private bool GetContainerAndLocation(string strIdent)
         {
             bool retval = true;
@@ -2388,273 +1672,125 @@ namespace ConnectionService
                     return false;
                 }
 
-                string sqlStatement = "SELECT * FROM CONTAINER WHERE GSM_NUMBER=@ICCID";
                 List<Location> locations = new List<Location>();
 
                 try
                 {
-                    using (SqlConnection sqlConnection = new SqlConnection(ConnectionControl.DB_CONNECTION_STRING))
+                    LogFile.WriteMessageToLogFile("Get container id for IccId: {0}", _container.IccId);
+                    _container.ContainerId = (int)ConnectionControl.SkpApiClient.GetContainerIdBySimCardNumber(_container.IccId);
+                    LogFile.WriteMessageToLogFile("Get container parameters for container id: {0}", _container.ContainerId);
+                    ContainerParamsDto contParams = ConnectionControl.SkpApiClient.GetContainerParams(_container.ContainerId);
+
+                    _container.MobileNumber = contParams.GsmNumber;
+                    _container.IdentString = contParams.InternalIdentNumber;
+                    _container.DeviceNumber = contParams.DeviceNumber;
+//                    _container.ContainerTypeId = contParams.;
+                    _container.FirmwareVersion = contParams.FirmwareVersion;
+                    _container.ReadPointer = (int)contParams.ReadPointer;
+                    _container.WritePointer = (int)contParams.WritePointer;
+                    _container.OperatorId = (int)contParams.OperatorId;
+
+                    LogFile.WriteMessageToLogFile("{0}: Found parameters: {1}, {2}, {3}, {4}, {5}, {6}, {7},", _container.ContainerId, _container.MobileNumber, _container.IdentString, _container.DeviceNumber,
+                        _container.FirmwareVersion, _container.OperatorId, _container.WritePointer, _container.ReadPointer);
+
+                    // get operator name
+                    OperatorParamsDto opParams = ConnectionControl.SkpApiClient.GetOperatorParams(_container.OperatorId);
+                    _container.OperatorName = opParams.OperatorName;
+
+                    LogFile.WriteMessageToLogFile("{0}: Operator: {1}", _container.OperatorId, _container.OperatorName);
+
+                    UpdateGeoPosition newGeoPos = new UpdateGeoPosition(lat, lng);
+                    ConnectionControl.SkpApiClient.UpdateContainerGeoPosition(_container.ContainerId, newGeoPos);
+
+                    //                    GetContainerType(_container.ContainerTypeId);
+
+                    //                    RemoveContainerFromLocations(_container.ContainerId);
+
+                    foreach (var location in ConnectionControl.SkpApiClient.GetLocationsForOperator(_container.OperatorId, new GetSkpLocations { MinLatitude = lat - 0.0020F, MaxLatitude = lat + 0.0020F, MinLongitude = lng - 0.002F, MaxLongitude = lng + 0.002F }))
                     {
-                        sqlConnection.Open();
+                        Location loc = new Location();
 
-                        using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
+                        loc.LocationId = (int)location.LocationId;
+                        loc.Name = location.Name;
+                        loc.MaterialId = (int)location.LocationTypeId;
+                        loc.Latitude = (double)location.Latitude;
+                        loc.Longitude = (double)location.Longitude;
+                        loc.IsWatchdogActive = (bool)location.LocationMonitoringActive;
+                        loc.PressStrokes = (int)location.NumberOfPresses;
+                        loc.PressPosition = (bool)location.PressPosition;
+
+                        if (location.NightlockStart.HasValue && location.NightlockStop.HasValue)
                         {
-                            SqlParameter param_gsm_number = new SqlParameter("@ICCID", SqlDbType.VarChar);
-                            param_gsm_number.Value = _container.IccId;
-
-                            cmd.Parameters.Add(param_gsm_number);
-
-                            using (SqlDataReader reader = cmd.ExecuteReader())
+                            DateTime nlStart = (DateTime)location.NightlockStart;
+                            DateTime nlStop = (DateTime)location.NightlockStop;
+                            if (nlStop < nlStart)
                             {
-                                if (reader.Read())
-                                {
-                                    _container.ContainerId = (int)reader["CONTAINER_ID"];
-                                    _container.OperatorId = (int)reader["OPERATOR_ID"];
-
-                                    if (reader["GSM_NR2"].GetType() != typeof(System.DBNull))
-                                        _container.MobileNumber = (string)reader["GSM_NR2"];
-                                    else
-                                        _container.MobileNumber = "---";
-
-                                    if (reader["INT_IDENTNR"].GetType() != typeof(System.DBNull))
-                                        _container.IdentString = (string)reader["INT_IDENTNR"];
-                                    else
-                                        _container.IdentString = "---";
-
-                                    if (reader["DEVICE_NUMBER"].GetType() != typeof(System.DBNull))
-                                        _container.DeviceNumber = (string)reader["DEVICE_NUMBER"];
-                                    else
-                                        _container.DeviceNumber = "---";
-
-                                    _container.ContainerTypeId = (int)reader["CONTAINER_TYPE_ID"];
-
-                                    try
-                                    {
-                                        if (reader["FIRMWAREVERSION"].GetType() != typeof(System.DBNull))
-                                        {
-                                            _container.FirmwareVersion = (string)reader["FIRMWAREVERSION"];
-                                        }
-                                        else
-                                            _container.FirmwareVersion = "unknown";
-                                    }
-                                    catch (Exception excp)
-                                    {
-                                        LogFile.WriteErrorToLogFile("Exception ({0}) while trying to retrieve firmwareversion", excp.Message);
-                                    }
-
-                                    GetOperatorParams(_container.OperatorId);
-                                    GetContainerType(_container.ContainerTypeId);
-
-                                    RemoveContainerFromLocations(_container.ContainerId);
-                                }
-                                else
-                                {
-                                    LogFile.WriteErrorToLogFile("Error while excuting sql statement: {0}", sqlStatement);
-                                    retval = false;
-                                }
-
-                                reader.Close();
-                            }
-                        }
-
-                        sqlStatement = "SELECT * FROM LOCATION WHERE FALCONICLOCATION=1 AND LAT >= @LAT_MIN AND LAT <= @LAT_MAX AND LNG >= @LNG_MIN AND LNG <= @LNG_MAX";
-
-                        if (preferedMaterialId != -1)
-                        {
-                            LogFile.WriteMessageToLogFile("Select location with specified materialId: {0}", preferedMaterialId);
-                            sqlStatement += " AND LOCATIONTYPE_ID=@LocationTypeId";
-                        }
-
-                        using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
-                        {
-                            SqlParameter latMin = new SqlParameter("@LAT_MIN", SqlDbType.Float);
-                            latMin.Value = lat - 0.0020F;
-                            SqlParameter latMax = new SqlParameter("@LAT_MAX", SqlDbType.Float);
-                            latMax.Value = lat + 0.0020F;
-                            SqlParameter lngMin = new SqlParameter("@LNG_MIN", SqlDbType.Float);
-                            lngMin.Value = lng - 0.0020F;
-                            SqlParameter lngMax = new SqlParameter("@LNG_MAX", SqlDbType.Float);
-                            lngMax.Value = lng + 0.0020F;
-                            LogFile.WriteMessageToLogFile("Location area: {0}, {1}, {2}, {3}", latMin.Value, latMax.Value, lngMin.Value, lngMax.Value);
-
-                            cmd.Parameters.Add(latMin);
-                            cmd.Parameters.Add(latMax);
-                            cmd.Parameters.Add(lngMin);
-                            cmd.Parameters.Add(lngMax);
-
-                            if (preferedMaterialId != -1)
-                            {
-                                SqlParameter prefMat = new SqlParameter("@LocationTypeId", SqlDbType.Int);
-                                prefMat.Value = preferedMaterialId;
-
-                                cmd.Parameters.Add(prefMat);
+                                nlStop = nlStop.AddDays(1);
                             }
 
-                            using (SqlDataReader reader = cmd.ExecuteReader())
-                            {
-                                while (reader.Read())
-                                {
-                                    Location loc = new Location();
+                            TimeSpan ts = nlStop.Subtract(nlStart);
 
-                                    loc.LocationId = (int)reader["LOCATION_ID"];
-                                    loc.LocationGroupId = (int)reader["LOCATION_GROUP_ID"];
-                                    loc.Name = (string)reader["LOCATION"];
-                                    loc.MaterialId = (int)reader["LOCATIONTYPE_ID"];
-                                    loc.Latitude = (double)reader["LAT"];
-                                    loc.Longitude = (double)reader["LNG"];
-                                    loc.IsWatchdogActive = (bool)reader["MONITORING_ACTIVE"];
-
-                                    if (reader["NIGHT_LOCK_START"].GetType() != typeof(System.DBNull))
-                                    {
-                                        DateTime dt = (DateTime)reader["NIGHT_LOCK_START"];
-
-                                        loc.NightLockStart = dt.Hour * 60 + dt.Minute;
-                                    }
-                                    else
-                                        loc.NightLockStart = 0;
-
-
-                                    if (reader["NIGHT_LOCK_DURATION"].GetType() != typeof(System.DBNull))
-                                    {
-                                        loc.NightLockDuration = (int)reader["NIGHT_LOCK_DURATION"];
-                                    }
-                                    else
-                                        loc.NightLockDuration = 0;
-
-                                    locations.Add(loc);
-                                }
-
-                                reader.Close();
-                            }
-                        }
-
-                        LogFile.WriteMessageToLogFile("Found {0} locations within search area.", locations.Count);
-
-                        // filter out locations which does not matches our operator id
-                        foreach (Location loc in locations)
-                        {
-                            sqlStatement = "SELECT * FROM LOCATION_GROUP WHERE LOCATION_GROUP_ID=@LocationGroupId";
-
-                            using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
-                            {
-                                SqlParameter locGroupId = new SqlParameter("@LocationGroupId", SqlDbType.Int);
-                                locGroupId.Value = loc.LocationGroupId;
-
-                                cmd.Parameters.Add(locGroupId);
-
-                                using (SqlDataReader reader = cmd.ExecuteReader())
-                                {
-                                    if (reader.Read())
-                                    {
-                                        int operatorId = (int)reader["OPERATOR_ID"];
-                                        if (_container.OperatorId == operatorId)
-                                        {
-                                            LogFile.WriteMessageToLogFile("Location: {0}, groupid: {1}, belongs to our operator id: {2}", loc.LocationId, loc.LocationGroupId, _container.OperatorId);
-                                            loc.IsValid = true;
-                                        }
-                                        else
-                                        {
-                                            LogFile.WriteMessageToLogFile("Location: {0}, groupid: {1}, wrong operator id: {2}", loc.LocationId, loc.LocationGroupId, operatorId);
-                                            loc.IsValid = false;
-                                        }
-                                    }
-                                    else
-                                    {
-                                        LogFile.WriteMessageToLogFile("No Location group found with groupid: {0}", loc.LocationGroupId);
-                                        loc.IsValid = false;
-                                    }
-                                    reader.Close();
-                                }
-                            }
-                        }
-
-                        double minDevLat = 90.0F;
-                        double minDevLong = 180.0F;
-                        Location bestLocation = null;
-
-                        foreach (Location loc in locations)
-                        {
-                            double devLat = Math.Abs(lat - loc.Latitude);
-                            double devLng = Math.Abs(lng - loc.Longitude);
-
-                            if (loc.IsValid)
-                            {
-                                LogFile.WriteMessageToLogFile("Location: {0}, deviation is lat: {1}, long: {2}", loc.LocationId, devLat, devLng);
-
-                                if (devLat < minDevLat && devLng < minDevLong)
-                                {
-                                    minDevLat = devLat;
-                                    minDevLong = devLng;
-                                    bestLocation = loc;
-                                }
-                            }
-                            else
-                            {
-                                LogFile.WriteMessageToLogFile("Location: {0}, does not belong to operator: {1}", loc.LocationId, _container.OperatorId);
-                            }
-                        }
-
-                        if (bestLocation != null)
-                        {
-                            this._location = bestLocation;
-
-                            LogFile.WriteMessageToLogFile("Selected Location: {0}, {1}", bestLocation.LocationId, bestLocation.Name);
-                            LogFile.WriteMessageToLogFile("Nightlockstart: {0}, End: {1}, Duration: {2}", bestLocation.NightLockStart, bestLocation.NightLockEnd, bestLocation.NightLockDuration);
-
-                            GetMaterialName(_location.MaterialId);
+                            loc.NightLockStart = nlStart.Hour * 60 + nlStart.Minute;
+                            loc.NightLockEnd = nlStop.Hour * 60 + nlStop.Minute;
+                            loc.NightLockDuration = (int)ts.TotalMinutes;
                         }
                         else
                         {
-                            LogFile.WriteMessageToLogFile("No location found within specified area!");
+                            loc.NightLockStart = 0;
+                            loc.NightLockDuration = 0;
                         }
 
+                        locations.Add(loc);
+                    }
 
-                        if (_location.LocationId != 0)
+
+                    LogFile.WriteMessageToLogFile("Found {0} locations within search area.", locations.Count);
+
+                    double minDevLat = 90.0F;
+                    double minDevLong = 180.0F;
+                    Location bestLocation = null;
+
+                    foreach (Location loc in locations)
+                    { 
+                        double devLat = Math.Abs(lat - loc.Latitude);
+                        double devLng = Math.Abs(lng - loc.Longitude);
+
+                        LogFile.WriteMessageToLogFile("Location: {0}, deviation is lat: {1}, long: {2}", loc.LocationId, devLat, devLng);
+
+                        if (devLat < minDevLat && devLng < minDevLong)
                         {
-                            byte[] tmpHash = new MD5CryptoServiceProvider().ComputeHash(ASCIIEncoding.ASCII.GetBytes(_location.Name));
-                            _location.StrHash = ByteArrayToString(tmpHash).Substring(0, 8);
-
-                            SetMapviewHash(DateTime.Now.AddHours(10));
-
-                            sqlStatement = "SELECT * FROM LOCATION_CONFIG WHERE LOCATION_ID=@LOCATIONID";
-
-                            using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
-                            {
-                                SqlParameter locId = new SqlParameter("@LOCATIONID", SqlDbType.Int);
-                                locId.Value = _location.LocationId;
-
-                                cmd.Parameters.Add(locId);
-
-                                using (SqlDataReader reader = cmd.ExecuteReader())
-                                {
-                                    if (reader.Read())
-                                    {
-                                        _location.PressStrokes = (int)reader["PRESS_STROKES"];
-                                        _location.PressPosition = (bool)reader["PRESS_POSITION"];
-                                        _location.FullWarningLevel = (int)reader["FULL_WARNING_LEVEL"];
-                                        _location.FullErrorLevel = (int)reader["FULL_ERROR_LEVEL"];
-                                    }
-                                    else
-                                    {
-                                        _location.PressStrokes = 3;
-                                        _location.PressPosition = false;
-                                        _location.FullWarningLevel = 75;
-                                        _location.FullErrorLevel = 100;
-                                    }
-
-                                    reader.Close();
-                                }
-                            }
+                            minDevLat = devLat;
+                            minDevLong = devLng;
+                            bestLocation = loc;
                         }
-                        else
-                        {
-                            _location.PressStrokes = 3;
-                            _location.PressPosition = false;
-                            _location.FullWarningLevel = 75;
-                            _location.FullErrorLevel = 100;
-                        }
+                    }
 
-                        sqlConnection.Close();
+                    if (bestLocation != null)
+                    {
+                        this._location = bestLocation;
+
+                        LogFile.WriteMessageToLogFile("Selected Location: {0}, {1}", bestLocation.LocationId, bestLocation.Name);
+                        LogFile.WriteMessageToLogFile("Nightlockstart: {0}, End: {1}, Duration: {2}", bestLocation.NightLockStart, bestLocation.NightLockEnd, bestLocation.NightLockDuration);
+
+                        _location.MaterialName = GetMaterialName(_location.MaterialId);
+
+                        UpdateContainer updateContainer = new UpdateContainer(_container.ContainerId);
+                        ConnectionControl.SkpApiClient.UpdateLocationContainer(_location.LocationId, updateContainer);
+
+
+                    }
+                    else
+                    {
+                        LogFile.WriteMessageToLogFile("No location found within specified area!");
+                    }
+
+                    if (this._location == null)
+                    {
+                        LogFile.WriteErrorToLogFile("No location found so use fallback values!");
+                        _location.PressStrokes = 3;
+                        _location.PressPosition = false;
+                        _location.FullWarningLevel = 75;
+                        _location.FullErrorLevel = 100;
                     }
                 }
                 catch (Exception e)
@@ -2693,7 +1829,7 @@ namespace ConnectionService
             return retval;
         }
 
-#endregion
+        #endregion
 
         #region Thread routines
 
@@ -2858,7 +1994,7 @@ namespace ConnectionService
                             break;
 
                         case _CLIENT_STATE.STOP:
-                            UpdateContainerLastCommunication(_container.ContainerId, DateTime.Now);
+                            ConnectionControl.SkpApiClient.UpdateContainerLastCommunication(_container.ContainerId, new UpdateLastCommunication(DateTime.Now));
                             LogFile.WriteMessageToLogFile("{0} Stop client -> up to date", Name);
                             Stop();
                             break;
@@ -2985,7 +2121,6 @@ namespace ConnectionService
                 _tcpClient.Close();
         }
 
-    #endregion
-
+#endregion
     }
 }
