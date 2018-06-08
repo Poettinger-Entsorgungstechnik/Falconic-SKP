@@ -36,7 +36,8 @@ namespace ConnectionService
 
         static string _apiId = "d760404a-5ad1-4227-b885-62c5dff69368";
         static string _apiKey = "31w0XJzAVP3P6IeyoFNZxYF2Ll8UVmdeo/WeiVq5AMY=";
-        static string _apiUrl = "https://falconic-skp-api-dev.azurewebsites.net";
+//        static string _apiUrl = "https://falconic-skp-api-dev.azurewebsites.net";
+        static string _apiUrl = "https://falconic-skp-api.azurewebsites.net";
 
         public static ISkpAPIv10 SkpApiClient = new SkpAPIv10(new Uri(_apiUrl), new ApiKeyDelegatingHandler(_apiId, _apiKey));
 
@@ -1895,6 +1896,10 @@ namespace ConnectionService
                                 {
                                     if (_container.NumberOfStoredEvents == 0)
                                     {
+                                        // store filling level if we do not have events
+                                        StoreContainerStatus containerStatus = new StoreContainerStatus(_container.IccId, 0, DateTime.Now, _location.LocationId, 42, _container.ActualFillingLevel);
+                                        ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, containerStatus);
+
                                         if (_container.WritePointer != _container.ReadPointer)
                                         {
                                             state = _CLIENT_STATE.START_READ_JOURNAL;
