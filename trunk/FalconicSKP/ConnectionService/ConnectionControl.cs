@@ -1932,8 +1932,17 @@ namespace ConnectionService
 
                     LogFile.WriteMessageToLogFile("{0}: Operator: {1}, Language: {2}", this.Name, _container.OperatorName, opParams.LanguageCode);
 
-                    UpdateGeoPosition newGeoPos = new UpdateGeoPosition(lat, lng);
-                    ConnectionControl.SkpApiClient.UpdateContainerGeoPosition(_container.ContainerId, newGeoPos);
+                    try
+                    {
+                        UpdateGeoPosition newGeoPos = new UpdateGeoPosition(lat, lng);
+                        ConnectionControl.SkpApiClient.UpdateContainerGeoPosition(_container.ContainerId, newGeoPos);
+                    }
+                    catch (Exception excp)
+                    {
+                        LogFile.WriteErrorToLogFile("{0}: Exception: {1}, while trying to update container geo position: {2}, {3}", this.Name, excp.Message, lat, lng);
+                    }
+
+                    LogFile.WriteMessageToLogFile("{0}: Get locations for this geopos", this.Name);
 
                     foreach (var location in ConnectionControl.SkpApiClient.GetLocationsForOperator(_container.OperatorId, new GetSkpLocations { MinLatitude = lat - 0.0020F, MaxLatitude = lat + 0.0020F, MinLongitude = lng - 0.002F, MaxLongitude = lng + 0.002F }))
                     {
