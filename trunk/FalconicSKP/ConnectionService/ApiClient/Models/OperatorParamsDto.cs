@@ -21,12 +21,13 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// Initializes a new instance of the OperatorParamsDto class.
         /// </summary>
-        public OperatorParamsDto(int? operatorId = default(int?), string operatorName = default(string), System.Guid? currencyId = default(System.Guid?), string languageCode = default(string))
+        public OperatorParamsDto(int? operatorId = default(int?), string operatorName = default(string), System.Guid? currencyId = default(System.Guid?), string languageCode = default(string), string timezoneId = default(string))
         {
             OperatorId = operatorId;
             OperatorName = operatorName;
             CurrencyId = currencyId;
             LanguageCode = languageCode;
+            TimezoneId = timezoneId;
             CustomInit();
         }
 
@@ -54,6 +55,11 @@ namespace Falconic.Skp.Api.Client.Models
         /// </summary>
         [JsonProperty(PropertyName = "languageCode")]
         public string LanguageCode { get; set; }
+
+        /// <summary>
+        /// </summary>
+        [JsonProperty(PropertyName = "timezoneId")]
+        public string TimezoneId { get; set; }
 
     }
 }

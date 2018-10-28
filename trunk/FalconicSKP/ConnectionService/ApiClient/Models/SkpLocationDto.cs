@@ -21,20 +21,22 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// Initializes a new instance of the SkpLocationDto class.
         /// </summary>
-        public SkpLocationDto(int? locationId = default(int?), string name = default(string), int? locationTypeId = default(int?), double? latitude = default(double?), double? longitude = default(double?), bool? locationMonitoringActive = default(bool?), System.DateTime? nightlockStart = default(System.DateTime?), System.DateTime? nightlockStop = default(System.DateTime?), int? percentFullMessage = default(int?), int? percentPreFullMessage = default(int?), int? numberOfPresses = default(int?), bool? pressPosition = default(bool?))
+        public SkpLocationDto(int? locationId = default(int?), string name = default(string), string fractionName = default(string), double? latitude = default(double?), double? longitude = default(double?), bool? locationMonitoringActive = default(bool?), bool? nightLockActive = default(bool?), System.DateTime? nightLockStart = default(System.DateTime?), System.DateTime? nightLockStop = default(System.DateTime?), int? percentFullMessage = default(int?), int? percentPreFullMessage = default(int?), int? numberOfPresses = default(int?), bool? pressPosition = default(bool?), int? machineUtilization = default(int?))
         {
             LocationId = locationId;
             Name = name;
-            LocationTypeId = locationTypeId;
+            FractionName = fractionName;
             Latitude = latitude;
             Longitude = longitude;
             LocationMonitoringActive = locationMonitoringActive;
-            NightlockStart = nightlockStart;
-            NightlockStop = nightlockStop;
+            NightLockActive = nightLockActive;
+            NightLockStart = nightLockStart;
+            NightLockStop = nightLockStop;
             PercentFullMessage = percentFullMessage;
             PercentPreFullMessage = percentPreFullMessage;
             NumberOfPresses = numberOfPresses;
             PressPosition = pressPosition;
+            MachineUtilization = machineUtilization;
             CustomInit();
         }
 
@@ -55,8 +57,8 @@ namespace Falconic.Skp.Api.Client.Models
 
         /// <summary>
         /// </summary>
-        [JsonProperty(PropertyName = "locationTypeId")]
-        public int? LocationTypeId { get; set; }
+        [JsonProperty(PropertyName = "fractionName")]
+        public string FractionName { get; set; }
 
         /// <summary>
         /// </summary>
@@ -75,13 +77,18 @@ namespace Falconic.Skp.Api.Client.Models
 
         /// <summary>
         /// </summary>
-        [JsonProperty(PropertyName = "nightlockStart")]
-        public System.DateTime? NightlockStart { get; set; }
+        [JsonProperty(PropertyName = "nightLockActive")]
+        public bool? NightLockActive { get; set; }
 
         /// <summary>
         /// </summary>
-        [JsonProperty(PropertyName = "nightlockStop")]
-        public System.DateTime? NightlockStop { get; set; }
+        [JsonProperty(PropertyName = "nightLockStart")]
+        public System.DateTime? NightLockStart { get; set; }
+
+        /// <summary>
+        /// </summary>
+        [JsonProperty(PropertyName = "nightLockStop")]
+        public System.DateTime? NightLockStop { get; set; }
 
         /// <summary>
         /// </summary>
@@ -102,6 +109,11 @@ namespace Falconic.Skp.Api.Client.Models
         /// </summary>
         [JsonProperty(PropertyName = "pressPosition")]
         public bool? PressPosition { get; set; }
+
+        /// <summary>
+        /// </summary>
+        [JsonProperty(PropertyName = "machineUtilization")]
+        public int? MachineUtilization { get; set; }
 
     }
 }

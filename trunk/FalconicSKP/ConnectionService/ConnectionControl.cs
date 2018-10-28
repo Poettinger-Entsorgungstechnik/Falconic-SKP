@@ -10,6 +10,7 @@ using System.Data;
 using System.Data.Spatial;
 using System.Data.SqlClient;
 using System.Linq;
+using System.IO;
 using System.Net;
 using System.Net.Mail;
 using System.Net.Sockets;
@@ -34,12 +35,19 @@ namespace ConnectionService
 
         #region static objects
 
+        bool _bIsDevelopmentService = false;
         static string _apiId = "d760404a-5ad1-4227-b885-62c5dff69368";
+//        static string _apiIdDev = "SKP-API-Client-Dev";
+        static string _apiIdTest = "SKP-API-Client-Test";
         static string _apiKey = "31w0XJzAVP3P6IeyoFNZxYF2Ll8UVmdeo/WeiVq5AMY=";
-//        static string _apiUrl = "https://falconic-skp-api-dev.azurewebsites.net";
-        static string _apiUrl = "https://falconic-skp-api.azurewebsites.net";
+//        static string _apiKeyDev= "FI4SpZav02A2F0oPIp9AQa53Ge+wJP3BVTs2P12VghE=";
+        static string _apiKeyTest = "G7FuovOAdd5IQ3XPz4m/LXeR9GiPX3xMcX/kdhVas/s=";
 
-        public static ISkpAPIv10 SkpApiClient = new SkpAPIv10(new Uri(_apiUrl), new ApiKeyDelegatingHandler(_apiId, _apiKey));
+        static string _apiUrl = "https://falconic-skp-api.azurewebsites.net";
+//        static string _apiUrlDev = "https://falconic-skp-api-dev.azurewebsites.net";
+        static string _apiUrlTest = "https://falconic-skp-api-test.azurewebsites.net";
+
+        public static ISkpAPIv10 SkpApiClient = null; // new SkpAPIv10(new Uri(_apiUrl), new ApiKeyDelegatingHandler(_apiId, _apiKey));
 
         #endregion
 
@@ -49,7 +57,13 @@ namespace ConnectionService
         private Mutex _emailMutex = new Mutex();
         private DateTime _tLastLocationCheck = DateTime.Now.Subtract(new TimeSpan(0,1,0,0,0));
         private Hashtable _lastMonitoringMessage = new Hashtable();
- 
+        private FileSystemWatcher _fsWatcher = new FileSystemWatcher();
+
+        private Dictionary<int, Location> _2DotZero_Containers = new Dictionary<int, Location>();
+        private Mutex _2DotZeroContainerMutex = new Mutex();
+
+        private DateTime _lastTimeFsWatcherCalled;
+
         #endregion
 
         #region Properties
@@ -81,8 +95,164 @@ namespace ConnectionService
 
         public ConnectionControl()
         {
+            int processId = System.Diagnostics.Process.GetCurrentProcess().Id;
+            String query = "SELECT * FROM Win32_Service where ProcessId = " + processId;
+            String serviceName = "";
+            System.Management.ManagementObjectSearcher searcher =
+                    new System.Management.ManagementObjectSearcher(query);
+
+            foreach (System.Management.ManagementObject queryObj in searcher.Get())
+            {
+                serviceName =  queryObj["Name"].ToString();
+            }
+
+            if (serviceName.IndexOf("Dev") != -1)
+            {
+//                _apiUrl = _apiUrlDev;
+                _apiUrl = _apiUrlTest;
+
+//                _apiId = _apiIdDev;
+                _apiId = _apiIdTest;
+
+//                _apiKey = _apiKeyDev;
+                _apiKey = _apiKeyTest;
+
+                _bIsDevelopmentService = true;
+            }
+
+            LogFile.WriteMessageToLogFile("Create SkpAPIv10 object to: {0}", _apiUrl);
+
+            try
+            {
+                SkpApiClient = new SkpAPIv10(new Uri(_apiUrl), new ApiKeyDelegatingHandler(_apiId, _apiKey));
+            }
+            catch (Exception excp)
+            {
+                LogFile.WriteErrorToLogFile("Exception: {0} while trying to establish connection to SkpAPIv10 on: {1}", excp.Message, _apiUrl);
+            }
+
+            // start file watcher for offline machines
+            _fsWatcher.Path = "c:\\SKP\\2.0 Machines\\";
+            _fsWatcher.NotifyFilter = NotifyFilters.LastWrite;
+            _fsWatcher.Filter = "*.txt";
+            _fsWatcher.Changed += FsWatcher_Changed;
+            _fsWatcher.EnableRaisingEvents = true;
+
+            _lastTimeFsWatcherCalled = DateTime.Now - new TimeSpan(0, 0, 10);
+            // read file
+            FsWatcher_Changed(this, new FileSystemEventArgs(WatcherChangeTypes.Changed, _fsWatcher.Path, "database.txt"));
         }
 
+        private void FsWatcher_Changed(object sender, System.IO.FileSystemEventArgs e)
+        {
+            TimeSpan span = DateTime.Now - _lastTimeFsWatcherCalled;
+
+            if (span.TotalMilliseconds < 1000)
+            {
+                LogFile.WriteMessageToLogFile("Ignore multiple filewatcher events");
+                return;
+
+            }
+
+            _lastTimeFsWatcherCalled = DateTime.Now;
+
+            LogFile.WriteMessageToLogFile("2.0 Database changed: {0}, {1}, {2}", e.FullPath, e.Name, e.ChangeType);
+
+            if (e.Name == "database.txt" && e.ChangeType == WatcherChangeTypes.Changed)
+            {
+                // wait a bit till editor closed all resources
+                Thread.Sleep(100);
+
+                try
+                {
+                    _2DotZeroContainerMutex.WaitOne();
+                    _2DotZero_Containers.Clear();
+
+                    try
+                    {
+                        // read the whole file into a string array                        
+                        StreamReader sr = new StreamReader(e.FullPath);
+                        string line;
+
+                        while ((line = sr.ReadLine()) != null)
+                        {
+                            try
+                            {
+                                string[] lineToks = line.Split(new char[] { ',' });
+
+                                if (line.StartsWith("#") || line == "") continue;
+
+                                int containerId = Convert.ToInt32(lineToks[0].Trim());
+                                int pressStrokes = Convert.ToInt32(lineToks[1].Trim());
+                                int pressStopAtFront = Convert.ToInt32(lineToks[2].Trim());
+                                int nearlyFull = Convert.ToInt32(lineToks[3].Trim());
+                                int full = Convert.ToInt32(lineToks[4].Trim());
+                                int workload = Convert.ToInt32(lineToks[5].Trim());
+                                int liftTiltEquipped = Convert.ToInt32(lineToks[6].Trim());
+                                int isRetroKit = Convert.ToInt32(lineToks[7].Trim());
+
+                                Location loc = new Location();
+
+                                loc.PressStrokes = pressStrokes;
+                                loc.PressPosition = (pressStopAtFront == 1);
+                                loc.FullWarningLevel = nearlyFull;
+                                loc.FullErrorLevel = full;
+                                loc.MachineUtilization = workload;
+                                loc.IsLiftTiltEquipped = (liftTiltEquipped == 1);
+                                loc.IsRetroKitEquipped = (isRetroKit == 1);
+
+                                LogFile.WriteMessageToLogFile("{0}: Add data from 2.0 database: {1}, {2}, {3}, {4}, {5}, {6}, {7}", String.Format("ContainerID {0}", containerId), 
+                                    loc.PressStrokes, loc.PressPosition, loc.FullWarningLevel, loc.FullErrorLevel,
+                                    loc.MachineUtilization, loc.IsLiftTiltEquipped, loc.IsRetroKitEquipped);
+
+                                _2DotZero_Containers.Add(containerId, loc);
+                            }
+                            catch (Exception excp)
+                            {
+                                LogFile.WriteErrorToLogFile("Exception ({0}) while trying to parse line: ({1})", excp.Message, line);
+                            }
+                        }
+
+                        sr.Close();
+                    }
+                    catch (Exception excp)
+                    {
+                        LogFile.WriteErrorToLogFile("Exception ({0}) while trying to read 2.0 database", excp.Message);
+                    }
+                }
+                catch (Exception excp)
+                {
+                    LogFile.WriteErrorToLogFile("Exception ({0}) while trying to access 2.0 dictionary", excp.Message);
+                }
+                finally
+                {
+                    _2DotZeroContainerMutex.ReleaseMutex();
+                }
+            }
+        }
+
+        public Location Get2DotZeroLocation(int containerId)
+        {
+            Location retval = null;
+
+            try
+            {
+                _2DotZeroContainerMutex.WaitOne();
+
+                retval = _2DotZero_Containers[containerId];
+            }
+            catch (Exception excp)
+            {
+                LogFile.WriteErrorToLogFile("Exception ({0}) while trying to access 2.0 dictionary", excp.Message);
+            }
+            finally
+            {
+                _2DotZeroContainerMutex.ReleaseMutex();
+            }
+
+            return retval;
+        }
+     
         #endregion
 
         #region static methods
@@ -91,7 +261,6 @@ namespace ConnectionService
         {
             try
             {
-                //                MailjetClient client = new MailjetClient("f45a3bcc36c321165eeeb8061abc1fcf", "0feec0515e1669c976034c6f6dcfc887");
                 MailjetClient client = new MailjetClient("c0719838f86777631495b01e3d9fb47f", "83cfc1e5f8c84cb2a549f2e9c386c3fc");
                 JArray jRecepients = new JArray();
 
@@ -138,89 +307,31 @@ namespace ConnectionService
             }
         }
 
-        public static void DoAlerting(int containerId, uint type, string smsMessage, string emailMessage, string subject)
+        // since 10.08.2018 only SMS Messages are sent by us
+        public static void DoAlerting(int containerId, int type, string smsMessage, string emailMessage, string subject)
         {
             ArrayList users = new ArrayList();
 
-            // different lists for full messages
-            if (type == 1 || type == 2)
+           foreach (var notification in ConnectionControl.SkpApiClient.GetNotificationContacts(containerId, type))
             {
-                foreach (var notification in ConnectionControl.SkpApiClient.GetNotificationContacts(containerId, new StatusTypeIdsModel(new List<int?> { 2, 3 })))
-                {
-                    AlertingUser user = new AlertingUser();
+                FieldAreaNetwork.AlertingUser alertUser = new FieldAreaNetwork.AlertingUser();
 
-                    if (notification.ContactMethod == SkpContactMethod.Email)
-                    {
-                        user.Flags |= (int)ALERTING_FLAGS.EMAIL_ENABLED;
-                        user.EmailAddress = notification.Contact;
-                    }
-                    else
-                    {
-                        user.Flags |= (int)ALERTING_FLAGS.SMS_ENABLED;
-                        user.TelephoneNumber = notification.Contact;
-                    }
-                    users.Add(user);
-                }
-            }
-            else
-            {
-                foreach (var notification in ConnectionControl.SkpApiClient.GetNotificationContacts(containerId, new StatusTypeIdsModel(new List<int?> { 11 })))
-                {
-                    AlertingUser user = new AlertingUser();
+                alertUser.ClientName = "SKP";
+                alertUser.TelephoneNumber = notification.Contact;
+                alertUser.Flags = (int)ALERTING_FLAGS.SMS_ENABLED;
+                alertUser.EmailAddress = "";
+                alertUser.Name = "Unknown";
 
-                    if (notification.ContactMethod == SkpContactMethod.Email)
-                    {
-                        user.Flags |= (int)ALERTING_FLAGS.EMAIL_ENABLED;
-                        user.EmailAddress = notification.Contact;
-                    }
-                    else
-                    {
-                        user.Flags |= (int)ALERTING_FLAGS.SMS_ENABLED;
-                        user.TelephoneNumber = notification.Contact;
-                    }
-
-                    users.Add(user);
-                }
+                users.Add(alertUser);
+                LogFile.WriteMessageToLogFile("Send SMS for user: {0} to number: {1}", alertUser.Name, alertUser.TelephoneNumber);
             }
 
-            for (int j = 0; j < users.Count; j++)
+            if (users.Count > 0)
             {
-                AlertingUser user = (AlertingUser)users[j];
+                if (smsMessage.Length > 160)
+                    smsMessage = smsMessage.Substring(0, 160);
 
-                // do sms alerting over wallner server and email alerting over MailJet
-                if ((user.Flags & (int)ALERTING_FLAGS.SMS_ENABLED) == 0x01)    // do sms alerting
-                {
-                    ArrayList users1 = new ArrayList();
-                    FieldAreaNetwork.AlertingUser alertUser = new FieldAreaNetwork.AlertingUser();
-
-                    alertUser.ClientName = "SKP";
-                    alertUser.TelephoneNumber = user.TelephoneNumber;
-                    alertUser.Flags = (int)ALERTING_FLAGS.SMS_ENABLED;
-                    alertUser.EmailAddress = "";
-                    alertUser.Name = user.Name;
-
-                    users1.Add(alertUser);
-                    LogFile.WriteMessageToLogFile("Send SMS for user: {0} to number: {1}", alertUser.Name, alertUser.TelephoneNumber);
-
-                    if (smsMessage.Length > 160)
-                        smsMessage = smsMessage.Substring(0, 160);
-
-                    FieldAreaNetwork.AlertingControl.AddAlarm("alarm.wallner-automation.com", users1, "WIP", smsMessage, false, 0);
-                }
-
-                if ((user.Flags & 0x02) == 0x02)    // do email alerting
-                {
-                    ArrayList users1 = new ArrayList();
-                    LogFile.WriteMessageToLogFile("Send Email for user: {0} to address: {1}", user.Name, user.EmailAddress);
-
-                    AlertingUser alertUser = new AlertingUser();
-                    alertUser.EmailAddress = user.EmailAddress;
-                    alertUser.Name = user.Name;
-
-                    users1.Add(alertUser);
-
-                    SendMail(emailMessage, subject, users1).Wait();
-                }
+                FieldAreaNetwork.AlertingControl.AddAlarm("alarm.wallner-automation.com", users, "WIP", smsMessage, false, 0);
             }
         }
         
@@ -442,7 +553,11 @@ namespace ConnectionService
 
             try
             {
-                tcpl = new TcpListener(IPAddress.Any, 820);
+                int port = 820;
+                if (_bIsDevelopmentService)
+                    port = 821;
+
+                tcpl = new TcpListener(IPAddress.Any, port);
                 tcpl.Start();
 
                 try
@@ -578,6 +693,7 @@ namespace ConnectionService
         private string _identString;                // identification string
         private string _deviceNumber;               // machine number
         private string _operatorName;
+        private string _operatorLanguage;           
         private string _containerType;
         private string _firmwareVersion;            // firmwareversion which should be installed
         private int _numberOfStoredEvents;          
@@ -623,8 +739,9 @@ namespace ConnectionService
         public int WritePointer { get => _writePointer; set => _writePointer = value; }
         public int ReadPointer { get => _readPointer; set => _readPointer = value; }
         public int JournalSize { get => _journalSize; set => _journalSize = value; }
+        public string OperatorLanguage { get => _operatorLanguage; set => _operatorLanguage = value; }
 
-#endregion
+        #endregion
 
         #region Constructor
 
@@ -661,6 +778,11 @@ namespace ConnectionService
         private bool _isWatchdogActive;
         private int _WatchdogDuration;
         private bool _bValid;                       // is location valid (operatorId =)
+        private int _machineUtilization;
+
+        // members only for 2.0 containers
+        private bool _bLiftTiltEquipped;
+        private bool _bRetroKitEquipped;
 
 #endregion
 
@@ -684,20 +806,29 @@ namespace ConnectionService
         public int WatchdogDuration { get => _WatchdogDuration; set => _WatchdogDuration = value; }
         public int LocationGroupId { get => _locationGroupId; set => _locationGroupId = value; }
         public bool IsValid { get => _bValid; set => _bValid = value; }
+        public int MachineUtilization { get => _machineUtilization; set => _machineUtilization = value; }
+        public bool IsLiftTiltEquipped { get => _bLiftTiltEquipped; set => _bLiftTiltEquipped = value; }
+        public bool IsRetroKitEquipped { get => _bRetroKitEquipped; set => _bRetroKitEquipped = value; }
 
-#endregion
+        #endregion
 
         #region constructor
 
         public Location()
         {
-            Name = "";
+            Name = "Not allocated";
             MaterialId = 2; // Karton
+            MaterialName = "unknown";
             PressStrokes = 3;
             FullWarningLevel = 75;
             FullErrorLevel = 95;
             LocationId = 0;
             _pressPosition = false;
+            _machineUtilization = 100;
+
+            _bLiftTiltEquipped = false;
+            _bRetroKitEquipped = false;
+
         }
 #endregion
     }
@@ -895,20 +1026,50 @@ namespace ConnectionService
             return epoch.AddSeconds(unixTime);
         }
 
-        private string GetMaterialName(int materialId)
+        private string GetMaterialName(int materialId, string language)
         {
             if (materialId == 1)
-                return "Gewerbemüll";
+            {
+                if (language == "DE")
+                    return "Gewerbemüll";
+                else
+                    return "Commercial waste";
+            }
             else if (materialId == 2)
-                return "Karton";
+            {
+                if (language == "DE")
+                    return "Karton";
+                else
+                    return "Cardboard";
+            }
             else if (materialId == 3)
-                return "Kunststoff";
+            {
+                if (language == "DE")
+                    return "Kunststoff";
+                else
+                    return "Plastic";
+            }
             else if (materialId == 4)
-                return "Mischpapier";
+            {
+                if (language == "DE")
+                    return "Mischpapier";
+                else
+                    return "Mixed paper";
+            }
             else if (materialId == 5)
-                return "Mischfolie";
+            {
+                if (language == "DE")
+                    return "Mischfolie";
+                else
+                    return "Mixed foil";
+            }
             else if (materialId == 6)
-                return "Gemischte Siedlungsabfälle";
+            {
+                if (language == "DE")
+                    return "Gemischte Siedlungsabfälle";
+                else
+                    return "Mixed waste";
+            }
             else
                 return "Nicht bekannt";
         }
@@ -1211,6 +1372,74 @@ namespace ConnectionService
                             _container.JournalSize = Convert.ToInt32(toks[3]);
                             _container.WritePointer = Convert.ToInt32(toks[4]);
                             _container.ReadPointer = Convert.ToInt32(toks[5]);
+
+                            // network info since firmware version 1.2.00
+                            if (toks.GetLength(0) > 8)
+                            {
+                                try
+                                {
+                                    int numberOfStartings = Convert.ToInt32(toks[6]);
+                                    int minutesOfOperation = Convert.ToInt32(toks[7]);
+                                    int mobileCountryCode = 0;
+                                    int mobileNetworkCode = 0;
+                                    int locationAreaCode = 0;
+                                    int cellId = 0;
+                                    int signaldB = 0;
+
+                                    String networkInfo = toks[8] + " - " + toks[9];
+
+                                    if (toks[10] != "SEARCH")
+                                    {
+                                        try
+                                        {
+                                            if (toks[9] == "2G")
+                                            {
+                                                signaldB = Convert.ToInt32(toks[11]);
+                                                mobileCountryCode = Convert.ToInt32(toks[12]);
+                                                mobileNetworkCode = Convert.ToInt32(toks[13]);
+                                                locationAreaCode = Convert.ToInt32(toks[14], 16);
+                                                cellId = Convert.ToInt32(toks[15], 16);
+                                            }
+                                            else if (toks[9] == "3G")
+                                            {
+                                                signaldB = Convert.ToInt32(toks[13]);
+                                                mobileCountryCode = Convert.ToInt32(toks[14]);
+                                                mobileNetworkCode = Convert.ToInt32(toks[15]);
+                                                locationAreaCode = Convert.ToInt32(toks[16], 16);
+                                                cellId = Convert.ToInt32(toks[17], 16);
+                                            }
+                                        }
+                                        catch (Exception excp)
+                                        {
+                                            LogFile.WriteMessageToLogFile("{0}: ({1}), while trying to get Networkinfo", this.Name, excp.Message);
+                                        }
+                                    }
+
+                                    networkInfo += String.Format(" ({0} dBm)", signaldB);
+                                    networkInfo += " - MCC: " + mobileCountryCode;
+                                    networkInfo += " - MNC: " + mobileNetworkCode;
+                                    networkInfo += " - LAC: " + locationAreaCode;
+                                    networkInfo += " - CELLID: " + cellId;
+
+
+                                    StoreContainerHardwareInformation info = new StoreContainerHardwareInformation();
+                                    info.FirmwareVersion = _container.ModemFirmwareVersion;
+                                    info.GsmSignalStrength = _container.ModemSignalQuality;
+                                    info.NumberOfStartings = numberOfStartings;
+                                    info.OperatingMinutes = minutesOfOperation;
+                                    info.Timestamp = DateTime.Now;
+                                    info.DataConnection = networkInfo;
+
+                                    LogFile.WriteMessageToLogFile("{0}: Store Hardwareinfo: {1}, {2}, {3}, {4}, {5}", this.Name, info.FirmwareVersion, info.GsmSignalStrength,
+                                        info.NumberOfStartings, info.OperatingMinutes, info.DataConnection);
+
+                                    ConnectionControl.SkpApiClient.StoreContainerHardwareInformationMethod(_container.ContainerId, info);
+                                }
+                                catch (Exception excp)
+                                {
+                                    LogFile.WriteErrorToLogFile("{0}: Exception ({1}) while trying to parse network info", this.Name, excp.Message);
+                                }
+                            }
                         }
                     }
                     catch (Exception excp)
@@ -1264,12 +1493,13 @@ namespace ConnectionService
                     return false;
                 }
 
+                List<StatusMessageDto> statusMsgList = new List<StatusMessageDto>();
+
                 // parse all entries
                 for (int i = 0; i < numberOfExpectedEntries; i++)
                 {
                     try
                     {
-                        string language_code = "";
                         string[] toks = str_entry[i].Split(new char[] { ',' });
 
                         if (toks.GetLength(0) != 11)
@@ -1304,74 +1534,74 @@ namespace ConnectionService
                         int entry_address = Convert.ToInt32(toks[0]);
                         int locationId = Convert.ToInt32(toks[1]);
                         string customerNumber = toks[4];
-                        int transactionStatusId = Convert.ToInt32(toks[6]);
+                        int code = Convert.ToInt32(toks[6]);
                         int duration = Convert.ToInt32(toks[7]);
                         int amount = Convert.ToInt32(toks[8]);
                         decimal positiveCreditBalance = Convert.ToDecimal(toks[9]) / 100;
                         int weight = Convert.ToInt32(toks[10]);
 
-                        // if customer number is a very high values (QR Lock)
-                        // we have to take care, ..
-                        try
+                        LogFile.WriteMessageToLogFile("{0}: Stored Event: {1}, time: {2}", this.Name, code, date);
+
+                        statusMsgList.Add(new StatusMessageDto(code, _container.ActualFillingLevel, date.ToUniversalTime(), true));
+
+                        string message = ConnectionControl.SkpApiClient.GetTranslation("Message", _container.OperatorLanguage);
+                        message += ": ";
+
+                        if (code == 10)  // Emptying
                         {
-                            // transactions with no customer number are normal container status messages
-                            if (Convert.ToInt32(customerNumber) == 0)
-                            {
-                                StoreContainerStatus containerStatus = new StoreContainerStatus(_container.IccId, transactionStatusId, date, locationId);
-                                ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, containerStatus);
+                            message += ConnectionControl.SkpApiClient.GetTranslation("Emptying", _container.OperatorLanguage);
+                        }
+                        else if (code == 20)  // Power On Event
+                        {
+                            if (_container.OperatorId == 10008) // no power on messages to wong fong
                                 continue;
-                            }
-                        }
-                        catch (Exception) { };
 
-#if false
-                        // update transaction count in container table
-                        if (!IncrementContainerTransactionCounter(_container.ContainerId))
+                            message += ConnectionControl.SkpApiClient.GetTranslation("PowerOn", _container.OperatorLanguage);
+                        }
+                        else if (code == 40) // Nearly full Event
                         {
-                            LogFile.WriteErrorToLogFile("{0} ParseJournalEntries, could update container transaction counter!", this.Name);
+                            message += ConnectionControl.SkpApiClient.GetTranslation("PreFull", _container.OperatorLanguage);
                         }
-
-                        int customerId = -1;
-                        int cardTypeId = -1;
-
-                        if (!GetCustomerData(customerNumber, _container.OperatorId, ref customerId, ref cardTypeId, ref language_code))
+                        else if (code == 41) // Full Event
                         {
-                            LogFile.WriteErrorToLogFile("{0} ParseJournalEntries, error while retrieving customer data!", this.Name);
-                            continue;
+                            message += ConnectionControl.SkpApiClient.GetTranslation("Full", _container.OperatorLanguage);
+                        }
+                        else if (code == 4025) // Emergency stop
+                        {
+                            message += ConnectionControl.SkpApiClient.GetTranslation("EmergencyStop", _container.OperatorLanguage);
+                        }
+                        else if (code == 4030) // Motorschutz
+                        {
+                            message += ConnectionControl.SkpApiClient.GetTranslation("MotorProtection", _container.OperatorLanguage);
+                        }
+                        else if (code == 4010) // Störung
+                        {
+                            message += ConnectionControl.SkpApiClient.GetTranslation("Malfunction", _container.OperatorLanguage);
                         }
 
-                        // store last waste disposal if we have transaction status id 1,2,3
-                        if ((transactionStatusId & 0x03) != 0)
-                        {
-                            if (!UpdateCustomerLastWasteDisposal(customerId, date))
-                            {
-                                LogFile.WriteErrorToLogFile("{0} ParseJournalEntries, error while updating last waste disposal date!", this.Name);
-                                continue;
-                            }
-                        }
 
-                        // if card type is a prepaid card, store credit balance
-                        if (cardTypeId == 1)   
-                        {
-                            if (!UpdateCustomersPositiveCreditBalance(customerId, positiveCreditBalance))
-                            {
-                                LogFile.WriteErrorToLogFile("{0} ParseJournalEntries, error while updating customers positive credit balance!", this.Name);
-                                continue;
-                            }
-                        }
+                        String smsMessage = "\nIdent Nr.: " + _container.IdentString + "\n";
+                        smsMessage += message + "\n";
 
-                        if (!StoreTransaction(_container.ContainerId, date, customerId, transactionStatusId, weight, duration, amount))
-                        {
-                            LogFile.WriteErrorToLogFile("{0} ParseJournalEntries, error while storing transaction!", this.Name);
-                            continue;
-                        }
-#endif
+                        smsMessage += ConnectionControl.SkpApiClient.GetTranslation("Material", _container.OperatorLanguage) + ": " + _location.MaterialName + "\n";
+
+                        smsMessage += ConnectionControl.SkpApiClient.GetTranslation("Operator", _container.OperatorLanguage) +  ": " + _container.OperatorName + "\n";
+
+                        smsMessage += ConnectionControl.SkpApiClient.GetTranslation("Location", _container.OperatorLanguage) + ": " + _location.Name + "\n";
+
+                        double lat = (double)_location.Latitude;
+                        double lng = (double)_location.Longitude;
+
+                        ConnectionControl.DoAlerting(_container.ContainerId, code, smsMessage, "", "");
                     }
                     catch (Exception excp)
                     {
                         LogFile.WriteErrorToLogFile("{0} Exception: {1}, while parsing entry {2}", this.Name, excp.Message, i + 1);
                     }
                 }
+
+                StoreContainerStatus containerStatus = new StoreContainerStatus(_container.IccId, _location.LocationId, statusMsgList);
+                ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, containerStatus);
 
                 return true;
             }
@@ -1395,93 +1625,89 @@ namespace ConnectionService
 
                     LogFile.WriteMessageToLogFile("Read ({0}) events: {1}", numberOfEvents, frame);
 
+                    List<StatusMessageDto> statusMsgList = new List<StatusMessageDto>();
+
                     for (int i = 0; i < numberOfEvents; i++)
                     {
                         uint type = System.Convert.ToUInt32(toks[i * 2 + 1]);
                         uint time = System.Convert.ToUInt32(toks[i * 2 + 2]);
+                        DateTime date = FromUnixTime(time);
+                        int code = 0;
 
                         LogFile.WriteMessageToLogFile("Event with type: {0} and time: {1}", type, time);
 
-                        if (type == 1)
+                        statusMsgList.Add(new StatusMessageDto(code, _container.ActualFillingLevel, date.ToUniversalTime(), true));
+
+                        string message = ConnectionControl.SkpApiClient.GetTranslation("Message", _container.OperatorLanguage);
+                        message += ": ";
+
+                        if (type == 0)  // Power On Event
                         {
-                            // emptying
-                            StoreContainerStatus containerStatus = new StoreContainerStatus(_container.IccId, 10, DateTime.Now, _location.LocationId, 1, 0);
-                            ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, containerStatus);
+                            message += ConnectionControl.SkpApiClient.GetTranslation("PowerOn", _container.OperatorLanguage);
+                            code = 20;
+                        }
+                        else if (type == 1)
+                        {
+                            message += ConnectionControl.SkpApiClient.GetTranslation("Emptying", _container.OperatorLanguage);
+                            code = 10;
+                        }
+                        else if (type == 2) // Nearly full Event
+                        {
+                            // nearly full
+                            message += ConnectionControl.SkpApiClient.GetTranslation("PreFull", _container.OperatorLanguage);
+                            code = 40;
+                        }
+                        else if (type == 3) // Full Event
+                        {
+                            // full
+                            message += ConnectionControl.SkpApiClient.GetTranslation("Full", _container.OperatorLanguage);
+                            code = 41;
+                        }
+                        else if (type == 4) // Emergency stop
+                        {
+                            message += ConnectionControl.SkpApiClient.GetTranslation("EmergencyStop", _container.OperatorLanguage);
+                            code = 4025;
+                        }
+                        else if (type == 5) // Motorschutz
+                        {
+                            message += ConnectionControl.SkpApiClient.GetTranslation("MotorProtection", _container.OperatorLanguage);
+                            code = 4030;
+                        }
+                        else if (type == 6) // Störung
+                        {
+                            message += ConnectionControl.SkpApiClient.GetTranslation("Malfunction", _container.OperatorLanguage);
+                            code = 3492;
                         }
                         else if (type == 10)
                         {
-                            // error has gone
-                            StoreContainerStatus containerStatus = new StoreContainerStatus(_container.IccId, 0, DateTime.Now, _location.LocationId, 10, _container.ActualFillingLevel);
-                            ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, containerStatus);
+                            // error free
+                            code = 21;
+                            // reset emergeny stop and motor protection prophylactic
+//                            StoreContainerStatus status = new StoreContainerStatus(_container.IccId, _location.LocationId, 4026, _container.ActualFillingLevel, date.ToUniversalTime());
+//                            ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, status);
+//                            status = new StoreContainerStatus(_container.IccId, _location.LocationId, 4031, _container.ActualFillingLevel, date.ToUniversalTime());
+//                            ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, status);
                         }
-                        else if (type < 256) // Event with alerting enabled
-                        {
 
-                            string message = "Meldung: ";
+                        LogFile.WriteMessageToLogFile("{0}: Stored Event: {1}, time: {2}", this.Name, code, date);
 
-                            if (type == 0)  // Power On Event
-                            {
-                                message += "HAUPTSCHALTER EIN";
-                            }
-                            else if (type == 2) // Nearly full Event
-                            {
-                                // nearly full
-                                StoreContainerStatus containerStatus = new StoreContainerStatus(_container.IccId, 40, DateTime.Now, _location.LocationId, (int)type, _container.ActualFillingLevel);
-                                ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, containerStatus);
-                                message += "VOR VOLL " + String.Format("( {0} % )", _location.FullWarningLevel);
-                            }
-                            else if (type == 3) // Full Event
-                            {
-                                // full
-                                StoreContainerStatus containerStatus = new StoreContainerStatus(_container.IccId, 3510, DateTime.Now, _location.LocationId, (int)type, _container.ActualFillingLevel);
-                                ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, containerStatus);
-                                message += "VOLL";
-                            }
-                            else if (type == 4) // Emergency stop
-                            {
-                                StoreContainerStatus containerStatus = new StoreContainerStatus(_container.IccId, 4, DateTime.Now, _location.LocationId, 11, _container.ActualFillingLevel);
-                                ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, containerStatus);
+                        String smsMessage = "\nIdent Nr.: " + _container.IdentString + "\n";
+                        smsMessage += message + "\n";
 
-                                message += "NOTHALT";
-                            }
-                            else if (type == 5) // Motorschutz
-                            {
-                                StoreContainerStatus containerStatus = new StoreContainerStatus(_container.IccId, 5, DateTime.Now, _location.LocationId, 11, _container.ActualFillingLevel);
-                                ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, containerStatus);
-                                message += "MOTORSCHUTZ";
-                            }
-                            else if (type == 6) // Störung
-                            {
-                                StoreContainerStatus containerStatus = new StoreContainerStatus(_container.IccId, 6, DateTime.Now, _location.LocationId, 11, _container.ActualFillingLevel);
-                                ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, containerStatus);
+                        smsMessage += ConnectionControl.SkpApiClient.GetTranslation("Material", _container.OperatorLanguage) + ": " + _location.MaterialName + "\n";
 
-                                message += "STOERUNG";
-                            }
+                        smsMessage += ConnectionControl.SkpApiClient.GetTranslation("Operator", _container.OperatorLanguage) + ": " + _container.OperatorName + "\n";
 
-                            String smsMessage = "\nIdent Nr.: " + _container.IdentString + "\n";
-                            smsMessage += message + "\n";
-                            smsMessage += "Fraktion: " + _location.MaterialName + "\n";
-                            //                        smsMessage += "SerialNr: " + _container.DeviceNumber + "\n";
-                            smsMessage += "Betreiber: " + _container.OperatorName + "\n";
-                            smsMessage += "Location: " + _location.Name + "\n";
+                        smsMessage += ConnectionControl.SkpApiClient.GetTranslation("Location", _container.OperatorLanguage) + ": " + _location.Name + "\n";
 
-                            String emailMessage = smsMessage;
-                            String subject = _container.IdentString + "_" + message + "_" + _location.MaterialName;
-                            emailMessage += "SerialNr: " + _container.DeviceNumber + "\n";
-                            emailMessage += "Typ: " + _container.ContainerType + "\n";
+                        double lat = (double)_location.Latitude;
+                        double lng = (double)_location.Longitude;
 
-                            double lat = (double)_location.Latitude;
-                            double lng = (double)_location.Longitude;
-
-                            LogFile.WriteMessageToLogFile("Alertingmessage: {0}", emailMessage);
-
-                            ConnectionControl.DoAlerting(_container.ContainerId, type, smsMessage, emailMessage, subject);
-                        }
-                        else  // Non error event
-                        {
- 
-                        }
+                        ConnectionControl.DoAlerting(_container.ContainerId, code, smsMessage, "", "");
                     }
+
+                    StoreContainerStatus containerStatus = new StoreContainerStatus(_container.IccId, _location.LocationId, statusMsgList);
+                    ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, containerStatus);
                 }
             }
             catch (Exception e)
@@ -1620,6 +1846,12 @@ namespace ConnectionService
 
         #region Database methods
 
+        private bool GetLocationDefaultParameters(Container cont)
+        {
+
+            return false;
+        }
+
         private bool GetContainerAndLocation(string strIdent)
         {
             bool retval = true;
@@ -1677,35 +1909,31 @@ namespace ConnectionService
 
                 try
                 {
-                    LogFile.WriteMessageToLogFile("Get container id for IccId: {0}", _container.IccId);
-                    _container.ContainerId = (int)ConnectionControl.SkpApiClient.GetContainerIdBySimCardNumber(_container.IccId);
-                    LogFile.WriteMessageToLogFile("Get container parameters for container id: {0}", _container.ContainerId);
-                    ContainerParamsDto contParams = ConnectionControl.SkpApiClient.GetContainerParams(_container.ContainerId);
+                    LogFile.WriteMessageToLogFile("Get container parameters for IccId: {0}", _container.IccId);
+                    ContainerParamsDto contParams = (ContainerParamsDto)ConnectionControl.SkpApiClient.GetContainerParams(_container.IccId);
 
+                    _container.ContainerId = (int)contParams.Id;
+                    this.Name = String.Format("ContainerID {0}:", _container.ContainerId);
                     _container.MobileNumber = contParams.GsmNumber;
                     _container.IdentString = contParams.InternalIdentNumber;
                     _container.DeviceNumber = contParams.DeviceNumber;
-//                    _container.ContainerTypeId = contParams.;
                     _container.FirmwareVersion = contParams.FirmwareVersion;
                     _container.ReadPointer = (int)contParams.ReadPointer;
                     _container.WritePointer = (int)contParams.WritePointer;
                     _container.OperatorId = (int)contParams.OperatorId;
 
-                    LogFile.WriteMessageToLogFile("{0}: Found parameters: {1}, {2}, {3}, {4}, {5}, {6}, {7},", _container.ContainerId, _container.MobileNumber, _container.IdentString, _container.DeviceNumber,
+                    LogFile.WriteMessageToLogFile("{0}: Found parameters: {1}, {2}, {3}, {4}, {5}, {6}, {7},", this.Name, _container.MobileNumber, _container.IdentString, _container.DeviceNumber,
                         _container.FirmwareVersion, _container.OperatorId, _container.WritePointer, _container.ReadPointer);
 
                     // get operator name
                     OperatorParamsDto opParams = ConnectionControl.SkpApiClient.GetOperatorParams(_container.OperatorId);
                     _container.OperatorName = opParams.OperatorName;
+                    _container.OperatorLanguage = opParams.LanguageCode;
 
-                    LogFile.WriteMessageToLogFile("{0}: Operator: {1}", _container.OperatorId, _container.OperatorName);
+                    LogFile.WriteMessageToLogFile("{0}: Operator: {1}, Language: {2}", this.Name, _container.OperatorName, opParams.LanguageCode);
 
                     UpdateGeoPosition newGeoPos = new UpdateGeoPosition(lat, lng);
                     ConnectionControl.SkpApiClient.UpdateContainerGeoPosition(_container.ContainerId, newGeoPos);
-
-                    //                    GetContainerType(_container.ContainerTypeId);
-
-                    //                    RemoveContainerFromLocations(_container.ContainerId);
 
                     foreach (var location in ConnectionControl.SkpApiClient.GetLocationsForOperator(_container.OperatorId, new GetSkpLocations { MinLatitude = lat - 0.0020F, MaxLatitude = lat + 0.0020F, MinLongitude = lng - 0.002F, MaxLongitude = lng + 0.002F }))
                     {
@@ -1713,17 +1941,22 @@ namespace ConnectionService
 
                         loc.LocationId = (int)location.LocationId;
                         loc.Name = location.Name;
-                        loc.MaterialId = (int)location.LocationTypeId;
+                        //                        loc.MaterialId = (int)location.LocationTypeId;
+                        _location.MaterialName = location.FractionName;
+
                         loc.Latitude = (double)location.Latitude;
                         loc.Longitude = (double)location.Longitude;
                         loc.IsWatchdogActive = (bool)location.LocationMonitoringActive;
                         loc.PressStrokes = (int)location.NumberOfPresses;
                         loc.PressPosition = (bool)location.PressPosition;
+                        loc.MachineUtilization = (int)location.MachineUtilization;
+                        loc.FullErrorLevel = (int)location.PercentFullMessage;
+                        loc.FullWarningLevel = (int)location.PercentPreFullMessage;
 
-                        if (location.NightlockStart.HasValue && location.NightlockStop.HasValue)
+                        if (location.NightLockStart.HasValue && location.NightLockStop.HasValue)
                         {
-                            DateTime nlStart = (DateTime)location.NightlockStart;
-                            DateTime nlStop = (DateTime)location.NightlockStop;
+                            DateTime nlStart = (DateTime)location.NightLockStart;
+                            DateTime nlStop = (DateTime)location.NightLockStop;
                             if (nlStop < nlStart)
                             {
                                 nlStop = nlStop.AddDays(1);
@@ -1745,7 +1978,7 @@ namespace ConnectionService
                     }
 
 
-                    LogFile.WriteMessageToLogFile("Found {0} locations within search area.", locations.Count);
+                    LogFile.WriteMessageToLogFile("{0}: Found {1} locations within search area.", this.Name, locations.Count);
 
                     double minDevLat = 90.0F;
                     double minDevLong = 180.0F;
@@ -1756,7 +1989,7 @@ namespace ConnectionService
                         double devLat = Math.Abs(lat - loc.Latitude);
                         double devLng = Math.Abs(lng - loc.Longitude);
 
-                        LogFile.WriteMessageToLogFile("Location: {0}, deviation is lat: {1}, long: {2}", loc.LocationId, devLat, devLng);
+                        LogFile.WriteMessageToLogFile("{0}: Location: {1}, deviation is lat: {2}, long: {3}", this.Name, loc.LocationId, devLat, devLng);
 
                         if (devLat < minDevLat && devLng < minDevLong)
                         {
@@ -1770,33 +2003,45 @@ namespace ConnectionService
                     {
                         this._location = bestLocation;
 
-                        LogFile.WriteMessageToLogFile("Selected Location: {0}, {1}", bestLocation.LocationId, bestLocation.Name);
-                        LogFile.WriteMessageToLogFile("Nightlockstart: {0}, End: {1}, Duration: {2}", bestLocation.NightLockStart, bestLocation.NightLockEnd, bestLocation.NightLockDuration);
+                        LogFile.WriteMessageToLogFile("{0}: Selected Location: {1}, {2}", this.Name, bestLocation.LocationId, bestLocation.Name);
+                        LogFile.WriteMessageToLogFile("{0}: Nightlockstart: {1}, End: {2}, Duration: {3}", this.Name, bestLocation.NightLockStart, bestLocation.NightLockEnd, bestLocation.NightLockDuration);
 
-                        _location.MaterialName = GetMaterialName(_location.MaterialId);
+//                        _location.MaterialName = GetMaterialName(_location.MaterialId, _container.OperatorLanguage);
 
                         UpdateContainer updateContainer = new UpdateContainer(_container.ContainerId);
                         ConnectionControl.SkpApiClient.UpdateLocationContainer(_location.LocationId, updateContainer);
-
-
                     }
                     else
                     {
-                        LogFile.WriteMessageToLogFile("No location found within specified area!");
+                        LogFile.WriteMessageToLogFile("{0}: No location found within specified area!", this.Name);
+                        ConnectionControl.SkpApiClient.RemoveContainerFromAllLocations(_container.ContainerId);
+
+                        // try to get standard parameters for container from 2.0 machine configuration database
+                        // there are containers listet which do not have falconic website support
+                        // these are configured with a simple text file
+                        Location loc = _controller.Get2DotZeroLocation(_container.ContainerId);
+                        if (loc != null)
+                        {
+                            _location.FullErrorLevel = loc.FullErrorLevel;
+                            _location.FullWarningLevel = loc.FullWarningLevel;
+                            _location.IsLiftTiltEquipped = loc.IsLiftTiltEquipped;
+                            _location.IsRetroKitEquipped = loc.IsRetroKitEquipped;
+                            _location.MachineUtilization = loc.MachineUtilization;
+                            _location.PressPosition = loc.PressPosition;
+                            _location.PressStrokes = loc.PressStrokes;
+
+                            LogFile.WriteMessageToLogFile("{0}: Take data from 2.0 database: {1}, {2}, {3}, {4}, {5}, {6}, {7}", this.Name,
+                                _location.PressStrokes, _location.PressPosition, _location.FullWarningLevel, _location.FullErrorLevel,
+                                _location.MachineUtilization, _location.IsLiftTiltEquipped, _location.IsRetroKitEquipped);                               
+                        }
                     }
 
-                    if (this._location == null)
-                    {
-                        LogFile.WriteErrorToLogFile("No location found so use fallback values!");
-                        _location.PressStrokes = 3;
-                        _location.PressPosition = false;
-                        _location.FullWarningLevel = 75;
-                        _location.FullErrorLevel = 100;
-                    }
+                    UpdateGeoPosition x = new UpdateGeoPosition(lat, lng);
+                    ConnectionControl.SkpApiClient.UpdateContainerGeoPosition(_container.ContainerId, x);
                 }
                 catch (Exception e)
                 {
-                    LogFile.WriteErrorToLogFile("{0} in \'GetContainerAndLocation\' appeared.", e.Message);
+                    LogFile.WriteErrorToLogFile("{0}: {1} in \'GetContainerAndLocation\' appeared.", this.Name, e.Message);
                     retval = false;
                 }
                 finally
@@ -1806,10 +2051,8 @@ namespace ConnectionService
             }
             catch (Exception excp)
             {
-                LogFile.WriteErrorToLogFile("Exception: {0} while trying to get container parameters", excp.Message);
+                LogFile.WriteErrorToLogFile("{0}: Exception: {1} while trying to get container parameters", this.Name, excp.Message);
             }
-
-            string new_name = String.Format("ContainerID {0}:", _container.ContainerId);
 
             // remove any possible zombie clients with the same name
             lock (_controller.ConnectedClients.SyncRoot)
@@ -1818,19 +2061,17 @@ namespace ConnectionService
                 {
                     ClientConnection client = (ClientConnection)_controller.ConnectedClients[i];
 
-                    if (client.Name == new_name)
+                    if (client != this && client.Name == this.Name)
                     {
                         client.Stop();
                     }
                 }
             }
 
-            this.Name = new_name;
-
             return retval;
         }
 
-        #endregion
+#endregion
 
         #region Thread routines
 
@@ -1865,13 +2106,13 @@ namespace ConnectionService
                                 {
                                     _bIdentified = true;
 
-                                    LogFile.WriteMessageToLogFile("{0} Found entry for container: {1}, ContainerId: {2}, on Location: {3}, MaterialId: {4}, MobileNumber: {5}, PressStrokes: {6}, PreFullLevel: {7}, FullLevel: {8}",
-                                        this.Name, _container.IdentString, _container.ContainerId, _location.LocationId, _location.MaterialId,
+                                    LogFile.WriteMessageToLogFile("{0} Found entry for container: {1}, ContainerId: {2}, on Location: {3}, Material: {4}, MobileNumber: {5}, PressStrokes: {6}, PreFullLevel: {7}, FullLevel: {8}",
+                                        this.Name, _container.IdentString, _container.ContainerId, _location.LocationId, _location.MaterialName,
                                         _container.MobileNumber, _location.PressStrokes, _location.FullWarningLevel, _location.FullErrorLevel);
 
-                                    string strCommand = String.Format("#CON={0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12},{13},", _destTime.ToString("ddMMyyyy"), _destTime.ToString("HHmmss"),
+                                    string strCommand = String.Format("#CON={0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12},{13},{14},{15},{16},", _destTime.ToString("ddMMyyyy"), _destTime.ToString("HHmmss"),
                                         _container.ContainerId, _container.OperatorId, _location.MaterialId, _container.MobileNumber, _location.PressStrokes, _location.PressPosition ? 1 : 0, _location.FullWarningLevel, _location.FullErrorLevel,
-                                        _container.FirmwareVersion, _location.NightLockStart, _location.NightLockDuration, _container.ContainerTypeId);
+                                        _container.FirmwareVersion, _location.NightLockStart, _location.NightLockDuration, _container.ContainerTypeId, _location.MachineUtilization, _location.IsLiftTiltEquipped ? 1 : 0, _location.IsRetroKitEquipped ? 1 : 0);
 
                                     if (SendCommand(strCommand))
                                         state = _CLIENT_STATE.WAIT_CONFIG_ACK;
@@ -1896,10 +2137,6 @@ namespace ConnectionService
                                 {
                                     if (_container.NumberOfStoredEvents == 0)
                                     {
-                                        // store filling level if we do not have events
-                                        StoreContainerStatus containerStatus = new StoreContainerStatus(_container.IccId, 0, DateTime.Now, _location.LocationId, 42, _container.ActualFillingLevel);
-                                        ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, containerStatus);
-
                                         if (_container.WritePointer != _container.ReadPointer)
                                         {
                                             state = _CLIENT_STATE.START_READ_JOURNAL;
@@ -1948,6 +2185,10 @@ namespace ConnectionService
                                     numberOfExpectedEntries = _container.WritePointer - _container.ReadPointer;
                                 else
                                     numberOfExpectedEntries = _container.WritePointer + (_container.JournalSize - _container.ReadPointer);
+
+                                // maximum allowed in one frame is 60
+                                if (numberOfExpectedEntries > 60)
+                                    numberOfExpectedEntries = 60;
 
                                 String command = String.Format("#JOU?{0},{1}", _container.ReadPointer, numberOfExpectedEntries);
                                 SendCommand(command);

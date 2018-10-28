@@ -21,7 +21,7 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// Initializes a new instance of the UpdateReadWritePointer class.
         /// </summary>
-        public UpdateReadWritePointer(int readPointer, int writePointer)
+        public UpdateReadWritePointer(int? readPointer = default(int?), int? writePointer = default(int?))
         {
             ReadPointer = readPointer;
             WritePointer = writePointer;
@@ -36,22 +36,12 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "readPointer")]
-        public int ReadPointer { get; set; }
+        public int? ReadPointer { get; set; }
 
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "writePointer")]
-        public int WritePointer { get; set; }
+        public int? WritePointer { get; set; }
 
-        /// <summary>
-        /// Validate the object.
-        /// </summary>
-        /// <exception cref="Microsoft.Rest.ValidationException">
-        /// Thrown if validation fails
-        /// </exception>
-        public virtual void Validate()
-        {
-            //Nothing to validate
-        }
     }
 }

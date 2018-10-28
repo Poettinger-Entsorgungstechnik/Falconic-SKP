@@ -21,7 +21,7 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// Initializes a new instance of the UpdateLastCommunication class.
         /// </summary>
-        public UpdateLastCommunication(System.DateTime lastCommunication)
+        public UpdateLastCommunication(System.DateTime? lastCommunication = default(System.DateTime?))
         {
             LastCommunication = lastCommunication;
             CustomInit();
@@ -35,17 +35,7 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "lastCommunication")]
-        public System.DateTime LastCommunication { get; set; }
+        public System.DateTime? LastCommunication { get; set; }
 
-        /// <summary>
-        /// Validate the object.
-        /// </summary>
-        /// <exception cref="Microsoft.Rest.ValidationException">
-        /// Thrown if validation fails
-        /// </exception>
-        public virtual void Validate()
-        {
-            //Nothing to validate
-        }
     }
 }

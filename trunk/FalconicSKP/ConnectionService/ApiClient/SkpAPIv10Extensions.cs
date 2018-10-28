@@ -18,39 +18,13 @@ namespace Falconic.Skp.Api.Client
             /// <param name='operations'>
             /// The operations group for this extension method.
             /// </param>
-            /// <param name='apiVersion'>
-            /// </param>
-            public static IList<SkpContainerDto> GetConfiguredContainers(this ISkpAPIv10 operations, string apiVersion = default(string))
-            {
-                return operations.GetConfiguredContainersAsync(apiVersion).GetAwaiter().GetResult();
-            }
-
-            /// <param name='operations'>
-            /// The operations group for this extension method.
-            /// </param>
-            /// <param name='apiVersion'>
-            /// </param>
-            /// <param name='cancellationToken'>
-            /// The cancellation token.
-            /// </param>
-            public static async Task<IList<SkpContainerDto>> GetConfiguredContainersAsync(this ISkpAPIv10 operations, string apiVersion = default(string), CancellationToken cancellationToken = default(CancellationToken))
-            {
-                using (var _result = await operations.GetConfiguredContainersWithHttpMessagesAsync(apiVersion, null, cancellationToken).ConfigureAwait(false))
-                {
-                    return _result.Body;
-                }
-            }
-
-            /// <param name='operations'>
-            /// The operations group for this extension method.
-            /// </param>
             /// <param name='simCardNumber'>
             /// </param>
             /// <param name='apiVersion'>
             /// </param>
-            public static int? GetContainerIdBySimCardNumber(this ISkpAPIv10 operations, string simCardNumber, string apiVersion = default(string))
+            public static ContainerParamsDto GetContainerParams(this ISkpAPIv10 operations, string simCardNumber, string apiVersion = default(string))
             {
-                return operations.GetContainerIdBySimCardNumberAsync(simCardNumber, apiVersion).GetAwaiter().GetResult();
+                return operations.GetContainerParamsAsync(simCardNumber, apiVersion).GetAwaiter().GetResult();
             }
 
             /// <param name='operations'>
@@ -63,9 +37,9 @@ namespace Falconic.Skp.Api.Client
             /// <param name='cancellationToken'>
             /// The cancellation token.
             /// </param>
-            public static async Task<int?> GetContainerIdBySimCardNumberAsync(this ISkpAPIv10 operations, string simCardNumber, string apiVersion = default(string), CancellationToken cancellationToken = default(CancellationToken))
+            public static async Task<ContainerParamsDto> GetContainerParamsAsync(this ISkpAPIv10 operations, string simCardNumber, string apiVersion = default(string), CancellationToken cancellationToken = default(CancellationToken))
             {
-                using (var _result = await operations.GetContainerIdBySimCardNumberWithHttpMessagesAsync(simCardNumber, apiVersion, null, cancellationToken).ConfigureAwait(false))
+                using (var _result = await operations.GetContainerParamsWithHttpMessagesAsync(simCardNumber, apiVersion, null, cancellationToken).ConfigureAwait(false))
                 {
                     return _result.Body;
                 }
@@ -78,9 +52,9 @@ namespace Falconic.Skp.Api.Client
             /// </param>
             /// <param name='apiVersion'>
             /// </param>
-            public static ContainerParamsDto GetContainerParams(this ISkpAPIv10 operations, int containerId, string apiVersion = default(string))
+            public static SkpContainerFeaturesDto GetContainerMachineData(this ISkpAPIv10 operations, int containerId, string apiVersion = default(string))
             {
-                return operations.GetContainerParamsAsync(containerId, apiVersion).GetAwaiter().GetResult();
+                return operations.GetContainerMachineDataAsync(containerId, apiVersion).GetAwaiter().GetResult();
             }
 
             /// <param name='operations'>
@@ -93,9 +67,9 @@ namespace Falconic.Skp.Api.Client
             /// <param name='cancellationToken'>
             /// The cancellation token.
             /// </param>
-            public static async Task<ContainerParamsDto> GetContainerParamsAsync(this ISkpAPIv10 operations, int containerId, string apiVersion = default(string), CancellationToken cancellationToken = default(CancellationToken))
+            public static async Task<SkpContainerFeaturesDto> GetContainerMachineDataAsync(this ISkpAPIv10 operations, int containerId, string apiVersion = default(string), CancellationToken cancellationToken = default(CancellationToken))
             {
-                using (var _result = await operations.GetContainerParamsWithHttpMessagesAsync(containerId, apiVersion, null, cancellationToken).ConfigureAwait(false))
+                using (var _result = await operations.GetContainerMachineDataWithHttpMessagesAsync(containerId, apiVersion, null, cancellationToken).ConfigureAwait(false))
                 {
                     return _result.Body;
                 }
@@ -258,39 +232,46 @@ namespace Falconic.Skp.Api.Client
             /// <param name='operations'>
             /// The operations group for this extension method.
             /// </param>
+            /// <param name='containerId'>
+            /// </param>
+            /// <param name='storeContainerHardwareInformation'>
+            /// </param>
             /// <param name='apiVersion'>
             /// </param>
-            public static IList<SkpStatusTypeDto> GetContainerStatusTypes(this ISkpAPIv10 operations, string apiVersion = default(string))
+            public static void StoreContainerHardwareInformationMethod(this ISkpAPIv10 operations, int containerId, StoreContainerHardwareInformation storeContainerHardwareInformation = default(StoreContainerHardwareInformation), string apiVersion = default(string))
             {
-                return operations.GetContainerStatusTypesAsync(apiVersion).GetAwaiter().GetResult();
+                operations.StoreContainerHardwareInformationMethodAsync(containerId, storeContainerHardwareInformation, apiVersion).GetAwaiter().GetResult();
             }
 
             /// <param name='operations'>
             /// The operations group for this extension method.
+            /// </param>
+            /// <param name='containerId'>
+            /// </param>
+            /// <param name='storeContainerHardwareInformation'>
             /// </param>
             /// <param name='apiVersion'>
             /// </param>
             /// <param name='cancellationToken'>
             /// The cancellation token.
             /// </param>
-            public static async Task<IList<SkpStatusTypeDto>> GetContainerStatusTypesAsync(this ISkpAPIv10 operations, string apiVersion = default(string), CancellationToken cancellationToken = default(CancellationToken))
+            public static async Task StoreContainerHardwareInformationMethodAsync(this ISkpAPIv10 operations, int containerId, StoreContainerHardwareInformation storeContainerHardwareInformation = default(StoreContainerHardwareInformation), string apiVersion = default(string), CancellationToken cancellationToken = default(CancellationToken))
             {
-                using (var _result = await operations.GetContainerStatusTypesWithHttpMessagesAsync(apiVersion, null, cancellationToken).ConfigureAwait(false))
-                {
-                    return _result.Body;
-                }
+                (await operations.StoreContainerHardwareInformationMethodWithHttpMessagesAsync(containerId, storeContainerHardwareInformation, apiVersion, null, cancellationToken).ConfigureAwait(false)).Dispose();
             }
 
             /// <param name='operations'>
             /// The operations group for this extension method.
             /// </param>
             /// <param name='containerId'>
+            /// </param>
+            /// <param name='statusMessage'>
             /// </param>
             /// <param name='apiVersion'>
             /// </param>
-            public static IList<NotificationContactDto> GetAllNotificationContacts(this ISkpAPIv10 operations, int containerId, string apiVersion = default(string))
+            public static IList<SkpNotificationContactDto> GetNotificationContacts(this ISkpAPIv10 operations, int containerId, int statusMessage, string apiVersion = default(string))
             {
-                return operations.GetAllNotificationContactsAsync(containerId, apiVersion).GetAwaiter().GetResult();
+                return operations.GetNotificationContactsAsync(containerId, statusMessage, apiVersion).GetAwaiter().GetResult();
             }
 
             /// <param name='operations'>
@@ -298,48 +279,16 @@ namespace Falconic.Skp.Api.Client
             /// </param>
             /// <param name='containerId'>
             /// </param>
-            /// <param name='apiVersion'>
-            /// </param>
-            /// <param name='cancellationToken'>
-            /// The cancellation token.
-            /// </param>
-            public static async Task<IList<NotificationContactDto>> GetAllNotificationContactsAsync(this ISkpAPIv10 operations, int containerId, string apiVersion = default(string), CancellationToken cancellationToken = default(CancellationToken))
-            {
-                using (var _result = await operations.GetAllNotificationContactsWithHttpMessagesAsync(containerId, apiVersion, null, cancellationToken).ConfigureAwait(false))
-                {
-                    return _result.Body;
-                }
-            }
-
-            /// <param name='operations'>
-            /// The operations group for this extension method.
-            /// </param>
-            /// <param name='containerId'>
-            /// </param>
-            /// <param name='statusTypeIdsModel'>
-            /// </param>
-            /// <param name='apiVersion'>
-            /// </param>
-            public static IList<NotificationContactDto> GetNotificationContacts(this ISkpAPIv10 operations, int containerId, StatusTypeIdsModel statusTypeIdsModel = default(StatusTypeIdsModel), string apiVersion = default(string))
-            {
-                return operations.GetNotificationContactsAsync(containerId, statusTypeIdsModel, apiVersion).GetAwaiter().GetResult();
-            }
-
-            /// <param name='operations'>
-            /// The operations group for this extension method.
-            /// </param>
-            /// <param name='containerId'>
-            /// </param>
-            /// <param name='statusTypeIdsModel'>
+            /// <param name='statusMessage'>
             /// </param>
             /// <param name='apiVersion'>
             /// </param>
             /// <param name='cancellationToken'>
             /// The cancellation token.
             /// </param>
-            public static async Task<IList<NotificationContactDto>> GetNotificationContactsAsync(this ISkpAPIv10 operations, int containerId, StatusTypeIdsModel statusTypeIdsModel = default(StatusTypeIdsModel), string apiVersion = default(string), CancellationToken cancellationToken = default(CancellationToken))
+            public static async Task<IList<SkpNotificationContactDto>> GetNotificationContactsAsync(this ISkpAPIv10 operations, int containerId, int statusMessage, string apiVersion = default(string), CancellationToken cancellationToken = default(CancellationToken))
             {
-                using (var _result = await operations.GetNotificationContactsWithHttpMessagesAsync(containerId, statusTypeIdsModel, apiVersion, null, cancellationToken).ConfigureAwait(false))
+                using (var _result = await operations.GetNotificationContactsWithHttpMessagesAsync(containerId, statusMessage, apiVersion, null, cancellationToken).ConfigureAwait(false))
                 {
                     return _result.Body;
                 }
@@ -379,9 +328,9 @@ namespace Falconic.Skp.Api.Client
             /// </param>
             /// <param name='apiVersion'>
             /// </param>
-            public static IList<LocationParamsDto> GetLocationParams(this ISkpAPIv10 operations, int locationId, string apiVersion = default(string))
+            public static SkpLocationDto GetLocationById(this ISkpAPIv10 operations, int locationId, string apiVersion = default(string))
             {
-                return operations.GetLocationParamsAsync(locationId, apiVersion).GetAwaiter().GetResult();
+                return operations.GetLocationByIdAsync(locationId, apiVersion).GetAwaiter().GetResult();
             }
 
             /// <param name='operations'>
@@ -394,9 +343,9 @@ namespace Falconic.Skp.Api.Client
             /// <param name='cancellationToken'>
             /// The cancellation token.
             /// </param>
-            public static async Task<IList<LocationParamsDto>> GetLocationParamsAsync(this ISkpAPIv10 operations, int locationId, string apiVersion = default(string), CancellationToken cancellationToken = default(CancellationToken))
+            public static async Task<SkpLocationDto> GetLocationByIdAsync(this ISkpAPIv10 operations, int locationId, string apiVersion = default(string), CancellationToken cancellationToken = default(CancellationToken))
             {
-                using (var _result = await operations.GetLocationParamsWithHttpMessagesAsync(locationId, apiVersion, null, cancellationToken).ConfigureAwait(false))
+                using (var _result = await operations.GetLocationByIdWithHttpMessagesAsync(locationId, apiVersion, null, cancellationToken).ConfigureAwait(false))
                 {
                     return _result.Body;
                 }
@@ -471,9 +420,9 @@ namespace Falconic.Skp.Api.Client
             /// </param>
             /// <param name='apiVersion'>
             /// </param>
-            public static string UpdateLocationContainer(this ISkpAPIv10 operations, int locationId, UpdateContainer updateContainer = default(UpdateContainer), string apiVersion = default(string))
+            public static void UpdateLocationContainer(this ISkpAPIv10 operations, int locationId, UpdateContainer updateContainer = default(UpdateContainer), string apiVersion = default(string))
             {
-                return operations.UpdateLocationContainerAsync(locationId, updateContainer, apiVersion).GetAwaiter().GetResult();
+                operations.UpdateLocationContainerAsync(locationId, updateContainer, apiVersion).GetAwaiter().GetResult();
             }
 
             /// <param name='operations'>
@@ -488,38 +437,9 @@ namespace Falconic.Skp.Api.Client
             /// <param name='cancellationToken'>
             /// The cancellation token.
             /// </param>
-            public static async Task<string> UpdateLocationContainerAsync(this ISkpAPIv10 operations, int locationId, UpdateContainer updateContainer = default(UpdateContainer), string apiVersion = default(string), CancellationToken cancellationToken = default(CancellationToken))
+            public static async Task UpdateLocationContainerAsync(this ISkpAPIv10 operations, int locationId, UpdateContainer updateContainer = default(UpdateContainer), string apiVersion = default(string), CancellationToken cancellationToken = default(CancellationToken))
             {
-                using (var _result = await operations.UpdateLocationContainerWithHttpMessagesAsync(locationId, updateContainer, apiVersion, null, cancellationToken).ConfigureAwait(false))
-                {
-                    return _result.Body;
-                }
-            }
-
-            /// <param name='operations'>
-            /// The operations group for this extension method.
-            /// </param>
-            /// <param name='apiVersion'>
-            /// </param>
-            public static IList<LocationTypeDto> GetLocationTypes(this ISkpAPIv10 operations, string apiVersion = default(string))
-            {
-                return operations.GetLocationTypesAsync(apiVersion).GetAwaiter().GetResult();
-            }
-
-            /// <param name='operations'>
-            /// The operations group for this extension method.
-            /// </param>
-            /// <param name='apiVersion'>
-            /// </param>
-            /// <param name='cancellationToken'>
-            /// The cancellation token.
-            /// </param>
-            public static async Task<IList<LocationTypeDto>> GetLocationTypesAsync(this ISkpAPIv10 operations, string apiVersion = default(string), CancellationToken cancellationToken = default(CancellationToken))
-            {
-                using (var _result = await operations.GetLocationTypesWithHttpMessagesAsync(apiVersion, null, cancellationToken).ConfigureAwait(false))
-                {
-                    return _result.Body;
-                }
+                (await operations.UpdateLocationContainerWithHttpMessagesAsync(locationId, updateContainer, apiVersion, null, cancellationToken).ConfigureAwait(false)).Dispose();
             }
 
             /// <param name='operations'>

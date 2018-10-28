@@ -32,16 +32,6 @@ namespace Falconic.Skp.Api.Client
         JsonSerializerSettings DeserializationSettings { get; }
 
 
-        /// <param name='apiVersion'>
-        /// </param>
-        /// <param name='customHeaders'>
-        /// The headers that will be added to request.
-        /// </param>
-        /// <param name='cancellationToken'>
-        /// The cancellation token.
-        /// </param>
-        Task<HttpOperationResponse<IList<SkpContainerDto>>> GetConfiguredContainersWithHttpMessagesAsync(string apiVersion = default(string), Dictionary<string, List<string>> customHeaders = null, CancellationToken cancellationToken = default(CancellationToken));
-
         /// <param name='simCardNumber'>
         /// </param>
         /// <param name='apiVersion'>
@@ -52,7 +42,7 @@ namespace Falconic.Skp.Api.Client
         /// <param name='cancellationToken'>
         /// The cancellation token.
         /// </param>
-        Task<HttpOperationResponse<int?>> GetContainerIdBySimCardNumberWithHttpMessagesAsync(string simCardNumber, string apiVersion = default(string), Dictionary<string, List<string>> customHeaders = null, CancellationToken cancellationToken = default(CancellationToken));
+        Task<HttpOperationResponse<ContainerParamsDto>> GetContainerParamsWithHttpMessagesAsync(string simCardNumber, string apiVersion = default(string), Dictionary<string, List<string>> customHeaders = null, CancellationToken cancellationToken = default(CancellationToken));
 
         /// <param name='containerId'>
         /// </param>
@@ -64,7 +54,7 @@ namespace Falconic.Skp.Api.Client
         /// <param name='cancellationToken'>
         /// The cancellation token.
         /// </param>
-        Task<HttpOperationResponse<ContainerParamsDto>> GetContainerParamsWithHttpMessagesAsync(int containerId, string apiVersion = default(string), Dictionary<string, List<string>> customHeaders = null, CancellationToken cancellationToken = default(CancellationToken));
+        Task<HttpOperationResponse<SkpContainerFeaturesDto>> GetContainerMachineDataWithHttpMessagesAsync(int containerId, string apiVersion = default(string), Dictionary<string, List<string>> customHeaders = null, CancellationToken cancellationToken = default(CancellationToken));
 
         /// <param name='containerId'>
         /// </param>
@@ -134,6 +124,10 @@ namespace Falconic.Skp.Api.Client
         /// </param>
         Task<HttpOperationResponse> StoreContainerStatusMethodWithHttpMessagesAsync(int containerId, StoreContainerStatus storeContainerStatus = default(StoreContainerStatus), string apiVersion = default(string), Dictionary<string, List<string>> customHeaders = null, CancellationToken cancellationToken = default(CancellationToken));
 
+        /// <param name='containerId'>
+        /// </param>
+        /// <param name='storeContainerHardwareInformation'>
+        /// </param>
         /// <param name='apiVersion'>
         /// </param>
         /// <param name='customHeaders'>
@@ -142,23 +136,11 @@ namespace Falconic.Skp.Api.Client
         /// <param name='cancellationToken'>
         /// The cancellation token.
         /// </param>
-        Task<HttpOperationResponse<IList<SkpStatusTypeDto>>> GetContainerStatusTypesWithHttpMessagesAsync(string apiVersion = default(string), Dictionary<string, List<string>> customHeaders = null, CancellationToken cancellationToken = default(CancellationToken));
+        Task<HttpOperationResponse> StoreContainerHardwareInformationMethodWithHttpMessagesAsync(int containerId, StoreContainerHardwareInformation storeContainerHardwareInformation = default(StoreContainerHardwareInformation), string apiVersion = default(string), Dictionary<string, List<string>> customHeaders = null, CancellationToken cancellationToken = default(CancellationToken));
 
         /// <param name='containerId'>
         /// </param>
-        /// <param name='apiVersion'>
-        /// </param>
-        /// <param name='customHeaders'>
-        /// The headers that will be added to request.
-        /// </param>
-        /// <param name='cancellationToken'>
-        /// The cancellation token.
-        /// </param>
-        Task<HttpOperationResponse<IList<NotificationContactDto>>> GetAllNotificationContactsWithHttpMessagesAsync(int containerId, string apiVersion = default(string), Dictionary<string, List<string>> customHeaders = null, CancellationToken cancellationToken = default(CancellationToken));
-
-        /// <param name='containerId'>
-        /// </param>
-        /// <param name='statusTypeIdsModel'>
+        /// <param name='statusMessage'>
         /// </param>
         /// <param name='apiVersion'>
         /// </param>
@@ -168,7 +150,7 @@ namespace Falconic.Skp.Api.Client
         /// <param name='cancellationToken'>
         /// The cancellation token.
         /// </param>
-        Task<HttpOperationResponse<IList<NotificationContactDto>>> GetNotificationContactsWithHttpMessagesAsync(int containerId, StatusTypeIdsModel statusTypeIdsModel = default(StatusTypeIdsModel), string apiVersion = default(string), Dictionary<string, List<string>> customHeaders = null, CancellationToken cancellationToken = default(CancellationToken));
+        Task<HttpOperationResponse<IList<SkpNotificationContactDto>>> GetNotificationContactsWithHttpMessagesAsync(int containerId, int statusMessage, string apiVersion = default(string), Dictionary<string, List<string>> customHeaders = null, CancellationToken cancellationToken = default(CancellationToken));
 
         /// <param name='containerId'>
         /// </param>
@@ -192,7 +174,7 @@ namespace Falconic.Skp.Api.Client
         /// <param name='cancellationToken'>
         /// The cancellation token.
         /// </param>
-        Task<HttpOperationResponse<IList<LocationParamsDto>>> GetLocationParamsWithHttpMessagesAsync(int locationId, string apiVersion = default(string), Dictionary<string, List<string>> customHeaders = null, CancellationToken cancellationToken = default(CancellationToken));
+        Task<HttpOperationResponse<SkpLocationDto>> GetLocationByIdWithHttpMessagesAsync(int locationId, string apiVersion = default(string), Dictionary<string, List<string>> customHeaders = null, CancellationToken cancellationToken = default(CancellationToken));
 
         /// <param name='locationId'>
         /// </param>
@@ -230,17 +212,7 @@ namespace Falconic.Skp.Api.Client
         /// <param name='cancellationToken'>
         /// The cancellation token.
         /// </param>
-        Task<HttpOperationResponse<string>> UpdateLocationContainerWithHttpMessagesAsync(int locationId, UpdateContainer updateContainer = default(UpdateContainer), string apiVersion = default(string), Dictionary<string, List<string>> customHeaders = null, CancellationToken cancellationToken = default(CancellationToken));
-
-        /// <param name='apiVersion'>
-        /// </param>
-        /// <param name='customHeaders'>
-        /// The headers that will be added to request.
-        /// </param>
-        /// <param name='cancellationToken'>
-        /// The cancellation token.
-        /// </param>
-        Task<HttpOperationResponse<IList<LocationTypeDto>>> GetLocationTypesWithHttpMessagesAsync(string apiVersion = default(string), Dictionary<string, List<string>> customHeaders = null, CancellationToken cancellationToken = default(CancellationToken));
+        Task<HttpOperationResponse> UpdateLocationContainerWithHttpMessagesAsync(int locationId, UpdateContainer updateContainer = default(UpdateContainer), string apiVersion = default(string), Dictionary<string, List<string>> customHeaders = null, CancellationToken cancellationToken = default(CancellationToken));
 
         /// <param name='operatorId'>
         /// </param>

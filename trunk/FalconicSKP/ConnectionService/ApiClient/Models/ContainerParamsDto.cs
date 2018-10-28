@@ -21,16 +21,19 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// Initializes a new instance of the ContainerParamsDto class.
         /// </summary>
-        public ContainerParamsDto(int? operatorId = default(int?), string internalIdentNumber = default(string), string deviceNumber = default(string), string simCardNumber = default(string), string gsmNumber = default(string), string firmwareVersion = default(string), int? readPointer = default(int?), int? writePointer = default(int?))
+        public ContainerParamsDto(int? id = default(int?), int? operatorId = default(int?), string internalIdentNumber = default(string), string deviceNumber = default(string), string simCardNumber = default(string), string gsmNumber = default(string), string firmwareVersion = default(string), string retrofit = default(string), int? readPointer = default(int?), int? writePointer = default(int?), PreferredLocationFractionDto preferredLocation = default(PreferredLocationFractionDto))
         {
+            Id = id;
             OperatorId = operatorId;
             InternalIdentNumber = internalIdentNumber;
             DeviceNumber = deviceNumber;
             SimCardNumber = simCardNumber;
             GsmNumber = gsmNumber;
             FirmwareVersion = firmwareVersion;
+            Retrofit = retrofit;
             ReadPointer = readPointer;
             WritePointer = writePointer;
+            PreferredLocation = preferredLocation;
             CustomInit();
         }
 
@@ -38,6 +41,11 @@ namespace Falconic.Skp.Api.Client.Models
         /// An initialization method that performs custom operations like setting defaults
         /// </summary>
         partial void CustomInit();
+
+        /// <summary>
+        /// </summary>
+        [JsonProperty(PropertyName = "id")]
+        public int? Id { get; set; }
 
         /// <summary>
         /// </summary>
@@ -71,6 +79,11 @@ namespace Falconic.Skp.Api.Client.Models
 
         /// <summary>
         /// </summary>
+        [JsonProperty(PropertyName = "retrofit")]
+        public string Retrofit { get; set; }
+
+        /// <summary>
+        /// </summary>
         [JsonProperty(PropertyName = "readPointer")]
         public int? ReadPointer { get; set; }
 
@@ -78,6 +91,11 @@ namespace Falconic.Skp.Api.Client.Models
         /// </summary>
         [JsonProperty(PropertyName = "writePointer")]
         public int? WritePointer { get; set; }
+
+        /// <summary>
+        /// </summary>
+        [JsonProperty(PropertyName = "preferredLocation")]
+        public PreferredLocationFractionDto PreferredLocation { get; set; }
 
     }
 }

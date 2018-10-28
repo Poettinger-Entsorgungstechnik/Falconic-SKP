@@ -7,6 +7,8 @@ namespace Falconic.Skp.Api.Client.Models
     using Falconic.Skp.Api.Client;
     using Microsoft.Rest;
     using Newtonsoft.Json;
+    using System.Collections;
+    using System.Collections.Generic;
     using System.Linq;
 
     public partial class StoreContainerStatus
@@ -22,14 +24,11 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// Initializes a new instance of the StoreContainerStatus class.
         /// </summary>
-        public StoreContainerStatus(string simCardNumber, int code, System.DateTime timestamp, int? locationId = default(int?), int? statusTypeId = default(int?), double? fillState = default(double?))
+        public StoreContainerStatus(string simCardNumber, int? locationId = default(int?), IList<StatusMessageDto> statusMessages = default(IList<StatusMessageDto>))
         {
             LocationId = locationId;
             SimCardNumber = simCardNumber;
-            Code = code;
-            StatusTypeId = statusTypeId;
-            FillState = fillState;
-            Timestamp = timestamp;
+            StatusMessages = statusMessages;
             CustomInit();
         }
 
@@ -50,23 +49,8 @@ namespace Falconic.Skp.Api.Client.Models
 
         /// <summary>
         /// </summary>
-        [JsonProperty(PropertyName = "code")]
-        public int Code { get; set; }
-
-        /// <summary>
-        /// </summary>
-        [JsonProperty(PropertyName = "statusTypeId")]
-        public int? StatusTypeId { get; set; }
-
-        /// <summary>
-        /// </summary>
-        [JsonProperty(PropertyName = "fillState")]
-        public double? FillState { get; set; }
-
-        /// <summary>
-        /// </summary>
-        [JsonProperty(PropertyName = "timestamp")]
-        public System.DateTime Timestamp { get; set; }
+        [JsonProperty(PropertyName = "statusMessages")]
+        public IList<StatusMessageDto> StatusMessages { get; set; }
 
         /// <summary>
         /// Validate the object.

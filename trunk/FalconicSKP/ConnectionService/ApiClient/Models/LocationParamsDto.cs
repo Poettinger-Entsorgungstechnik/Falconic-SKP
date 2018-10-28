@@ -21,14 +21,15 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// Initializes a new instance of the LocationParamsDto class.
         /// </summary>
-        public LocationParamsDto(string locationName = default(string), System.DateTime? nightlockStart = default(System.DateTime?), System.DateTime? nightlockStop = default(System.DateTime?), double? accessLimit = default(double?), double? pricePerOneHundretKilo = default(double?), bool? emptyingIsMaintained = default(bool?))
+        public LocationParamsDto(string name = default(string), System.DateTime? nightlockStart = default(System.DateTime?), System.DateTime? nightlockStop = default(System.DateTime?), double? accessLimit = default(double?), double? pricePerOneHundredKilo = default(double?), bool? emptyingIsMaintained = default(bool?), int? machineUtilization = default(int?))
         {
-            LocationName = locationName;
+            Name = name;
             NightlockStart = nightlockStart;
             NightlockStop = nightlockStop;
             AccessLimit = accessLimit;
-            PricePerOneHundretKilo = pricePerOneHundretKilo;
+            PricePerOneHundredKilo = pricePerOneHundredKilo;
             EmptyingIsMaintained = emptyingIsMaintained;
+            MachineUtilization = machineUtilization;
             CustomInit();
         }
 
@@ -39,8 +40,8 @@ namespace Falconic.Skp.Api.Client.Models
 
         /// <summary>
         /// </summary>
-        [JsonProperty(PropertyName = "locationName")]
-        public string LocationName { get; set; }
+        [JsonProperty(PropertyName = "name")]
+        public string Name { get; set; }
 
         /// <summary>
         /// </summary>
@@ -59,13 +60,18 @@ namespace Falconic.Skp.Api.Client.Models
 
         /// <summary>
         /// </summary>
-        [JsonProperty(PropertyName = "pricePerOneHundretKilo")]
-        public double? PricePerOneHundretKilo { get; set; }
+        [JsonProperty(PropertyName = "pricePerOneHundredKilo")]
+        public double? PricePerOneHundredKilo { get; set; }
 
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "emptyingIsMaintained")]
         public bool? EmptyingIsMaintained { get; set; }
+
+        /// <summary>
+        /// </summary>
+        [JsonProperty(PropertyName = "machineUtilization")]
+        public int? MachineUtilization { get; set; }
 
     }
 }

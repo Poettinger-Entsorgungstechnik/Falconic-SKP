@@ -21,13 +21,12 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// Initializes a new instance of the GetSkpLocations class.
         /// </summary>
-        public GetSkpLocations(double minLatitude, double maxLatitude, double minLongitude, double maxLongitude, int? preferedLocationTypeId = default(int?))
+        public GetSkpLocations(double? minLatitude = default(double?), double? maxLatitude = default(double?), double? minLongitude = default(double?), double? maxLongitude = default(double?))
         {
             MinLatitude = minLatitude;
             MaxLatitude = maxLatitude;
             MinLongitude = minLongitude;
             MaxLongitude = maxLongitude;
-            PreferedLocationTypeId = preferedLocationTypeId;
             CustomInit();
         }
 
@@ -39,37 +38,22 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "minLatitude")]
-        public double MinLatitude { get; set; }
+        public double? MinLatitude { get; set; }
 
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "maxLatitude")]
-        public double MaxLatitude { get; set; }
+        public double? MaxLatitude { get; set; }
 
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "minLongitude")]
-        public double MinLongitude { get; set; }
+        public double? MinLongitude { get; set; }
 
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "maxLongitude")]
-        public double MaxLongitude { get; set; }
+        public double? MaxLongitude { get; set; }
 
-        /// <summary>
-        /// </summary>
-        [JsonProperty(PropertyName = "preferedLocationTypeId")]
-        public int? PreferedLocationTypeId { get; set; }
-
-        /// <summary>
-        /// Validate the object.
-        /// </summary>
-        /// <exception cref="Microsoft.Rest.ValidationException">
-        /// Thrown if validation fails
-        /// </exception>
-        public virtual void Validate()
-        {
-            //Nothing to validate
-        }
     }
 }

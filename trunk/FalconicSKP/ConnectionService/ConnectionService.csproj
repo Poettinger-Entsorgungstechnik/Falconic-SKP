@@ -8,9 +8,10 @@
     <OutputType>WinExe</OutputType>
     <RootNamespace>ConnectionService</RootNamespace>
     <AssemblyName>ConnectionService</AssemblyName>
-    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -64,18 +65,21 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ApiClient\ISkpAPIv10.cs" />
+    <Compile Include="ApiClient\Models\ContactMethod.cs" />
+    <Compile Include="ApiClient\Models\ContainerFeaturesDto.cs" />
     <Compile Include="ApiClient\Models\ContainerParamsDto.cs" />
     <Compile Include="ApiClient\Models\GetSkpLocations.cs" />
     <Compile Include="ApiClient\Models\LastCommunicationResult.cs" />
     <Compile Include="ApiClient\Models\LocationParamsDto.cs" />
     <Compile Include="ApiClient\Models\LocationTypeDto.cs" />
-    <Compile Include="ApiClient\Models\NotificationContactDto.cs" />
     <Compile Include="ApiClient\Models\OperatorParamsDto.cs" />
-    <Compile Include="ApiClient\Models\SkpContactMethod.cs" />
+    <Compile Include="ApiClient\Models\PreferredLocationFractionDto.cs" />
     <Compile Include="ApiClient\Models\SkpContainerDto.cs" />
+    <Compile Include="ApiClient\Models\SkpContainerFeaturesDto.cs" />
     <Compile Include="ApiClient\Models\SkpLocationDto.cs" />
-    <Compile Include="ApiClient\Models\SkpStatusTypeDto.cs" />
-    <Compile Include="ApiClient\Models\StatusTypeIdsModel.cs" />
+    <Compile Include="ApiClient\Models\SkpNotificationContactDto.cs" />
+    <Compile Include="ApiClient\Models\StatusMessageDto.cs" />
+    <Compile Include="ApiClient\Models\StoreContainerHardwareInformation.cs" />
     <Compile Include="ApiClient\Models\StoreContainerStatus.cs" />
     <Compile Include="ApiClient\Models\UpdateContainer.cs" />
     <Compile Include="ApiClient\Models\UpdateGeoPosition.cs" />
@@ -108,6 +112,12 @@
     <EmbeddedResource Include="ProjectInstaller.resx">
       <DependentUpon>ProjectInstaller.cs</DependentUpon>
     </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="C:\Users\andre\OneDrive\Dokumente\Visual Studio 2017\Projects\Falconic\FalconicSKP\ConnectionService\Falconic.Messaging\Falconic.Messaging.csproj">
+      <Project>{74d28ea1-f2ca-4bde-8b5c-89749c6ba4c2}</Project>
+      <Name>Falconic.Messaging</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
