@@ -21,7 +21,7 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// Initializes a new instance of the ContainerParamsDto class.
         /// </summary>
-        public ContainerParamsDto(int? id = default(int?), int? operatorId = default(int?), string internalIdentNumber = default(string), string deviceNumber = default(string), string simCardNumber = default(string), string gsmNumber = default(string), string firmwareVersion = default(string), string retrofit = default(string), int? readPointer = default(int?), int? writePointer = default(int?), PreferredLocationFractionDto preferredLocation = default(PreferredLocationFractionDto))
+        public ContainerParamsDto(int? id = default(int?), int? operatorId = default(int?), string internalIdentNumber = default(string), string deviceNumber = default(string), string simCardNumber = default(string), string gsmNumber = default(string), string firmwareVersion = default(string), bool? retrofit = default(bool?), int? readPointer = default(int?), int? writePointer = default(int?), PreferredLocationFractionDto preferredLocation = default(PreferredLocationFractionDto), PreferredLocationFractionDto lastLocation = default(PreferredLocationFractionDto))
         {
             Id = id;
             OperatorId = operatorId;
@@ -34,6 +34,7 @@ namespace Falconic.Skp.Api.Client.Models
             ReadPointer = readPointer;
             WritePointer = writePointer;
             PreferredLocation = preferredLocation;
+            LastLocation = lastLocation;
             CustomInit();
         }
 
@@ -80,7 +81,7 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "retrofit")]
-        public string Retrofit { get; set; }
+        public bool? Retrofit { get; set; }
 
         /// <summary>
         /// </summary>
@@ -96,6 +97,11 @@ namespace Falconic.Skp.Api.Client.Models
         /// </summary>
         [JsonProperty(PropertyName = "preferredLocation")]
         public PreferredLocationFractionDto PreferredLocation { get; set; }
+
+        /// <summary>
+        /// </summary>
+        [JsonProperty(PropertyName = "lastLocation")]
+        public PreferredLocationFractionDto LastLocation { get; set; }
 
     }
 }

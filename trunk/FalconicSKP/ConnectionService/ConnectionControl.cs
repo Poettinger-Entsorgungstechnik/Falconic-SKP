@@ -1,7 +1,5 @@
 ﻿using Luthien;
 using FieldAreaNetwork;
-using Mailjet.Client;
-using Mailjet.Client.Resources;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections;
@@ -23,6 +21,10 @@ using System.Security.Cryptography;
 
 using Falconic.Skp.Api.Client;
 using Falconic.Skp.Api.Client.Models;
+using Falconic.Messaging.DTOs;
+using Falconic.Messaging.Exceptions;
+using Microsoft.Azure.ServiceBus;
+using Newtonsoft.Json;
 
 namespace ConnectionService
 {
@@ -47,6 +49,7 @@ namespace ConnectionService
 //        static string _apiUrlDev = "https://falconic-skp-api-dev.azurewebsites.net";
         static string _apiUrlTest = "https://falconic-skp-api-test.azurewebsites.net";
 
+
         public static ISkpAPIv10 SkpApiClient = null; // new SkpAPIv10(new Uri(_apiUrl), new ApiKeyDelegatingHandler(_apiId, _apiKey));
 
         #endregion
@@ -63,6 +66,92 @@ namespace ConnectionService
         private Mutex _2DotZeroContainerMutex = new Mutex();
 
         private DateTime _lastTimeFsWatcherCalled;
+        private Dictionary<string, Dictionary<string, string>> _lngDictionary = new Dictionary<string, Dictionary<string, string>>();
+
+        #endregion
+
+        #region Azure Message Queue
+
+        private static QueueClient queueClient;
+
+        private static void RegisterOnMessageHandlerAndReceiveMessages()
+        {
+            // Configure the message handler options in terms of exception handling, number of concurrent messages to deliver, etc.
+            var messageHandlerOptions = new MessageHandlerOptions(ExceptionReceivedHandler)
+            {
+                // Maximum number of concurrent calls to the callback ProcessMessagesAsync(), set to 1 for simplicity.
+                // Set it according to how many messages the application wants to process in parallel.
+                MaxConcurrentCalls = 1,
+
+                // Indicates whether the message pump should automatically complete the messages after returning from user callback.
+                // False below indicates the complete operation is handled by the user callback as in ProcessMessagesAsync().
+                AutoComplete = false
+            };
+
+            // Register the function that processes messages.
+            queueClient.RegisterMessageHandler(ProcessMessagesAsync, messageHandlerOptions);
+        }
+
+        private static async Task ProcessMessagesAsync(Microsoft.Azure.ServiceBus.Message message, CancellationToken token)
+        {
+            try
+            {
+                // Process the message.
+                var messageBody = Encoding.UTF8.GetString(message.Body);
+
+                // Console.WriteLine($"Received message: SequenceNumber: {message.SystemProperties.SequenceNumber} Body: {messageBody}");
+                var queueMessage = JsonConvert.DeserializeObject<QueueMessage>(messageBody);
+                if (queueMessage == null)
+                {
+                    throw new UnknownMessageContentException("Content: " + messageBody);
+                }
+
+                if (queueMessage.Type == QueueMessageType.ContainerLocationAssignmentChangedMessage)
+                {
+                    var locationChangedMessage = JsonConvert.DeserializeObject<ContainerLocationAssignmentChangedMessage>(queueMessage.InnerMessage);
+                    LogFile.WriteMessageToLogFile(
+                        $"[{locationChangedMessage.UtcTimestamp}]: " +
+                        $"Container location assignment changed for containerId {locationChangedMessage.ContainerId} " +
+                        $"(GSMNumber: {locationChangedMessage.GsmNumber}) to locationId {locationChangedMessage.LocationId}");
+
+                    ArrayList users = new ArrayList();
+                    FieldAreaNetwork.AlertingUser alertUser = new FieldAreaNetwork.AlertingUser();
+                        
+                    alertUser.ClientName = "SKP";
+                    alertUser.TelephoneNumber = locationChangedMessage.GsmNumber;
+                    alertUser.Flags = (int)ALERTING_FLAGS.SMS_ENABLED;
+                    alertUser.EmailAddress = "";
+                    alertUser.Name = "Unknown";
+                    users.Add(alertUser);
+
+                    FieldAreaNetwork.AlertingControl.AddAlarm("alarm.wallner-automation.com", users, "WIP", "Report", false, 0);
+                }
+
+                // Complete the message so that it is not received again.
+                // This can be done only if the queue Client is created in ReceiveMode.PeekLock mode (which is the default).
+                await queueClient.CompleteAsync(message.SystemProperties.LockToken);
+
+                // Note: Use the cancellationToken passed as necessary to determine if the queueClient has already been closed.
+                // If queueClient has already been closed, you can choose to not call CompleteAsync() or AbandonAsync() etc.
+                // to avoid unnecessary exceptions.
+            }
+            catch (Exception excp)
+            {
+                LogFile.WriteErrorToLogFile("Exception ({0} while trying to process message", excp.Message);
+            }
+        }
+
+        // Use this handler to examine the exceptions received on the message pump.
+        static Task ExceptionReceivedHandler(ExceptionReceivedEventArgs exceptionReceivedEventArgs)
+        {
+            LogFile.WriteErrorToLogFile($"Message handler encountered an exception {exceptionReceivedEventArgs.Exception}.");
+            var context = exceptionReceivedEventArgs.ExceptionReceivedContext;
+            LogFile.WriteErrorToLogFile("Exception context for troubleshooting:");
+            LogFile.WriteErrorToLogFile($"- Endpoint: {context.Endpoint}");
+            LogFile.WriteErrorToLogFile($"- Entity Path: {context.EntityPath}");
+            LogFile.WriteErrorToLogFile($"- Executing Action: {context.Action}");
+            return Task.CompletedTask;
+        }
 
         #endregion
 
@@ -98,6 +187,11 @@ namespace ConnectionService
             int processId = System.Diagnostics.Process.GetCurrentProcess().Id;
             String query = "SELECT * FROM Win32_Service where ProcessId = " + processId;
             String serviceName = "";
+            String serviceBusConnectionString = "Endpoint=sb://falconic.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=s3/BE9xHzVzMaG91Omzay9+erI8v3fnI3iY21rkf5go=";
+            String queueName = "skp-notification";
+
+            LogFile.WriteMessageToLogFile("ConnectionControl: {0}", processId);
+
             System.Management.ManagementObjectSearcher searcher =
                     new System.Management.ManagementObjectSearcher(query);
 
@@ -117,7 +211,24 @@ namespace ConnectionService
 //                _apiKey = _apiKeyDev;
                 _apiKey = _apiKeyTest;
 
+                queueName = "skp-notification-test";
+
                 _bIsDevelopmentService = true;
+            }
+
+
+            try
+            {
+                LogFile.WriteMessageToLogFile("Create Message Queue: {0}", queueName);
+
+                queueClient = new QueueClient(serviceBusConnectionString, queueName);
+
+                // see https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-dotnet-get-started-with-queues#4-receive-messages-from-the-queue
+                RegisterOnMessageHandlerAndReceiveMessages();
+            }
+            catch (Exception excp)
+            {
+                LogFile.WriteErrorToLogFile("Exception: {0} while trying to connect service bus queue: {1}", excp.Message, queueName);
             }
 
             LogFile.WriteMessageToLogFile("Create SkpAPIv10 object to: {0}", _apiUrl);
@@ -239,7 +350,8 @@ namespace ConnectionService
             {
                 _2DotZeroContainerMutex.WaitOne();
 
-                retval = _2DotZero_Containers[containerId];
+                if (_2DotZero_Containers.ContainsKey(containerId))
+                    retval = _2DotZero_Containers[containerId];
             }
             catch (Exception excp)
             {
@@ -257,62 +369,62 @@ namespace ConnectionService
 
         #region static methods
 
-        public static async Task SendMail(string message, string subject, ArrayList recipients)
-        {
-            try
-            {
-                MailjetClient client = new MailjetClient("c0719838f86777631495b01e3d9fb47f", "83cfc1e5f8c84cb2a549f2e9c386c3fc");
-                JArray jRecepients = new JArray();
+        //public static async Task SendMail(string message, string subject, ArrayList recipients)
+        //{
+        //    try
+        //    {
+        //        MailjetClient client = new MailjetClient("c0719838f86777631495b01e3d9fb47f", "83cfc1e5f8c84cb2a549f2e9c386c3fc");
+        //        JArray jRecepients = new JArray();
 
-                for (int i = 0; i < recipients.Count; i++)
-                {
-                    AlertingUser user = (AlertingUser)recipients[i];
+        //        for (int i = 0; i < recipients.Count; i++)
+        //        {
+        //            AlertingUser user = (AlertingUser)recipients[i];
 
-                    jRecepients.Add(new JObject { { "Email", user.EmailAddress } });
-                }
+        //            jRecepients.Add(new JObject { { "Email", user.EmailAddress } });
+        //        }
 
-                MailjetRequest request = new MailjetRequest
-                {
-                    Resource = Send.Resource,
-                }
-                   //                   .Property(Send.FromEmail, "elch@aon.at")
-                   .Property(Send.FromEmail, "falconic@poettinger.at")
-                   .Property(Send.FromName, "FALCONIC")
-                   .Property(Send.Subject, subject)
-                   .Property(Send.TextPart, message)
-                    //               .Property(Send.HtmlPart, "<h3>Dear passenger, welcome to Mailjet!</h3><br />May the delivery force be with you!")
-                    //.Property(Send.Recipients, new JArray {
-                    //    new JObject {
-                    //        {"Email", "andreas.erler@ocilion.com"}
-                    //        }
-                    //    });
+        //        MailjetRequest request = new MailjetRequest
+        //        {
+        //            Resource = Send.Resource,
+        //        }
+        //           //                   .Property(Send.FromEmail, "elch@aon.at")
+        //           .Property(Send.FromEmail, "falconic@poettinger.at")
+        //           .Property(Send.FromName, "FALCONIC")
+        //           .Property(Send.Subject, subject)
+        //           .Property(Send.TextPart, message)
+        //            //               .Property(Send.HtmlPart, "<h3>Dear passenger, welcome to Mailjet!</h3><br />May the delivery force be with you!")
+        //            //.Property(Send.Recipients, new JArray {
+        //            //    new JObject {
+        //            //        {"Email", "andreas.erler@ocilion.com"}
+        //            //        }
+        //            //    });
 
-                    .Property(Send.Recipients, jRecepients);
+        //            .Property(Send.Recipients, jRecepients);
 
-                MailjetResponse response = await client.PostAsync(request);
-                if (response.IsSuccessStatusCode)
-                {
-                    LogFile.WriteMessageToLogFile("Total: {0}, Count: {1}\n", response.GetTotal(), response.GetCount());
-                }
-                else
-                {
-                    LogFile.WriteErrorToLogFile("StatusCode: {0}\n", response.StatusCode);
-                    LogFile.WriteErrorToLogFile("ErrorInfo: {0}\n", response.GetErrorInfo());
-                    LogFile.WriteErrorToLogFile("ErrorMessage: {0}\n", response.GetErrorMessage());
-                }
-            }
-            catch (Exception excp)
-            {
-                LogFile.WriteErrorToLogFile(excp.Message);
-            }
-        }
+        //        MailjetResponse response = await client.PostAsync(request);
+        //        if (response.IsSuccessStatusCode)
+        //        {
+        //            LogFile.WriteMessageToLogFile("Total: {0}, Count: {1}\n", response.GetTotal(), response.GetCount());
+        //        }
+        //        else
+        //        {
+        //            LogFile.WriteErrorToLogFile("StatusCode: {0}\n", response.StatusCode);
+        //            LogFile.WriteErrorToLogFile("ErrorInfo: {0}\n", response.GetErrorInfo());
+        //            LogFile.WriteErrorToLogFile("ErrorMessage: {0}\n", response.GetErrorMessage());
+        //        }
+        //    }
+        //    catch (Exception excp)
+        //    {
+        //        LogFile.WriteErrorToLogFile(excp.Message);
+        //    }
+        //}
 
         // since 10.08.2018 only SMS Messages are sent by us
         public static void DoAlerting(int containerId, int type, string smsMessage, string emailMessage, string subject)
         {
             ArrayList users = new ArrayList();
 
-           foreach (var notification in ConnectionControl.SkpApiClient.GetNotificationContacts(containerId, type))
+            foreach (var notification in ConnectionControl.SkpApiClient.GetNotificationContacts(containerId, type))
             {
                 FieldAreaNetwork.AlertingUser alertUser = new FieldAreaNetwork.AlertingUser();
 
@@ -387,6 +499,19 @@ namespace ConnectionService
             }
         }
 
+        public string GetTranslation(string message, string language)
+        {
+            // check for language
+            if (!_lngDictionary.ContainsKey(language))
+                _lngDictionary[language] = new Dictionary<string, string>();
+
+            if (_lngDictionary[language].ContainsKey(message))
+                return _lngDictionary[language][message];
+            else
+                _lngDictionary[language][message] = SkpApiClient.GetTranslation(message, language);
+
+            return _lngDictionary[language][message];
+        }
 
 #if false
         private void LocationMonitoring()
@@ -696,13 +821,16 @@ namespace ConnectionService
         private string _operatorLanguage;           
         private string _containerType;
         private string _firmwareVersion;            // firmwareversion which should be installed
-        private int _numberOfStoredEvents;          
+        private int _numberOfStoredEvents;
+        private bool _bIsRetroFit;
+        private bool _bIsLiftTiltEquipped;
+        private bool _bIsExternalStartEquipped;
 
-#endregion
+        #endregion
 
         #region Objects Members
 
-                private string _modemFirmwareVersion;       // modem firmware version string
+        private string _modemFirmwareVersion;       // modem firmware version string
                 private string _controllerFirmwareVersion;  // controller firmware version string
                 private int _ModemSignalQuality;            // controller signal quality information
                 private int _actualFillingLevel;            // actual calculated filling level
@@ -740,6 +868,9 @@ namespace ConnectionService
         public int ReadPointer { get => _readPointer; set => _readPointer = value; }
         public int JournalSize { get => _journalSize; set => _journalSize = value; }
         public string OperatorLanguage { get => _operatorLanguage; set => _operatorLanguage = value; }
+        public bool IsRetroFit { get => _bIsRetroFit; set => _bIsRetroFit = value; }
+        public bool IsLiftTiltEquipped { get => _bIsLiftTiltEquipped; set => _bIsLiftTiltEquipped = value; }
+        public bool IsExternalStartEquipped { get => _bIsExternalStartEquipped; set => _bIsExternalStartEquipped = value; }
 
         #endregion
 
@@ -750,6 +881,8 @@ namespace ConnectionService
             NumberOfStoredEvents = 0;
             ModemFirmwareVersion = "unknown";
             ControllerFirmwareVersion = "unknown";
+            IsRetroFit = false;
+            IsLiftTiltEquipped = false;
         }
 
 #endregion
@@ -1544,50 +1677,53 @@ namespace ConnectionService
 
                         statusMsgList.Add(new StatusMessageDto(code, _container.ActualFillingLevel, date.ToUniversalTime(), true));
 
-                        string message = ConnectionControl.SkpApiClient.GetTranslation("Message", _container.OperatorLanguage);
+                        string message = Controller.GetTranslation("Message", _container.OperatorLanguage);
                         message += ": ";
 
                         if (code == 10)  // Emptying
                         {
-                            message += ConnectionControl.SkpApiClient.GetTranslation("Emptying", _container.OperatorLanguage);
+                            message += Controller.GetTranslation("Emptying", _container.OperatorLanguage);
                         }
                         else if (code == 20)  // Power On Event
                         {
                             if (_container.OperatorId == 10008) // no power on messages to wong fong
                                 continue;
 
-                            message += ConnectionControl.SkpApiClient.GetTranslation("PowerOn", _container.OperatorLanguage);
+                            message += Controller.GetTranslation("PowerOn", _container.OperatorLanguage);
                         }
                         else if (code == 40) // Nearly full Event
                         {
-                            message += ConnectionControl.SkpApiClient.GetTranslation("PreFull", _container.OperatorLanguage);
+                            message += Controller.GetTranslation("PreFull", _container.OperatorLanguage);
                         }
                         else if (code == 41) // Full Event
                         {
-                            message += ConnectionControl.SkpApiClient.GetTranslation("Full", _container.OperatorLanguage);
+                            message += Controller.GetTranslation("Full", _container.OperatorLanguage);
                         }
                         else if (code == 4025) // Emergency stop
                         {
-                            message += ConnectionControl.SkpApiClient.GetTranslation("EmergencyStop", _container.OperatorLanguage);
+                            message += Controller.GetTranslation("EmergencyStop", _container.OperatorLanguage);
                         }
                         else if (code == 4030) // Motorschutz
                         {
-                            message += ConnectionControl.SkpApiClient.GetTranslation("MotorProtection", _container.OperatorLanguage);
+                            message += Controller.GetTranslation("MotorProtection", _container.OperatorLanguage);
                         }
                         else if (code == 4010) // Störung
                         {
-                            message += ConnectionControl.SkpApiClient.GetTranslation("Malfunction", _container.OperatorLanguage);
+                            message += Controller.GetTranslation("Malfunction", _container.OperatorLanguage);
                         }
-
+                        else if (code == 2727) // Geodata changed
+                        {
+                            continue;
+                        }
 
                         String smsMessage = "\nIdent Nr.: " + _container.IdentString + "\n";
                         smsMessage += message + "\n";
 
-                        smsMessage += ConnectionControl.SkpApiClient.GetTranslation("Material", _container.OperatorLanguage) + ": " + _location.MaterialName + "\n";
+                        smsMessage += Controller.GetTranslation("Material", _container.OperatorLanguage) + ": " + _location.MaterialName + "\n";
 
-                        smsMessage += ConnectionControl.SkpApiClient.GetTranslation("Operator", _container.OperatorLanguage) +  ": " + _container.OperatorName + "\n";
+                        smsMessage += Controller.GetTranslation("Operator", _container.OperatorLanguage) +  ": " + _container.OperatorName + "\n";
 
-                        smsMessage += ConnectionControl.SkpApiClient.GetTranslation("Location", _container.OperatorLanguage) + ": " + _location.Name + "\n";
+                        smsMessage += Controller.GetTranslation("Location", _container.OperatorLanguage) + ": " + _location.Name + "\n";
 
                         double lat = (double)_location.Latitude;
                         double lng = (double)_location.Longitude;
@@ -1638,44 +1774,44 @@ namespace ConnectionService
 
                         statusMsgList.Add(new StatusMessageDto(code, _container.ActualFillingLevel, date.ToUniversalTime(), true));
 
-                        string message = ConnectionControl.SkpApiClient.GetTranslation("Message", _container.OperatorLanguage);
+                        string message = Controller.GetTranslation("Message", _container.OperatorLanguage);
                         message += ": ";
 
                         if (type == 0)  // Power On Event
                         {
-                            message += ConnectionControl.SkpApiClient.GetTranslation("PowerOn", _container.OperatorLanguage);
+                            message += Controller.GetTranslation("PowerOn", _container.OperatorLanguage);
                             code = 20;
                         }
                         else if (type == 1)
                         {
-                            message += ConnectionControl.SkpApiClient.GetTranslation("Emptying", _container.OperatorLanguage);
+                            message += Controller.GetTranslation("Emptying", _container.OperatorLanguage);
                             code = 10;
                         }
                         else if (type == 2) // Nearly full Event
                         {
                             // nearly full
-                            message += ConnectionControl.SkpApiClient.GetTranslation("PreFull", _container.OperatorLanguage);
+                            message += Controller.GetTranslation("PreFull", _container.OperatorLanguage);
                             code = 40;
                         }
                         else if (type == 3) // Full Event
                         {
                             // full
-                            message += ConnectionControl.SkpApiClient.GetTranslation("Full", _container.OperatorLanguage);
+                            message += Controller.GetTranslation("Full", _container.OperatorLanguage);
                             code = 41;
                         }
                         else if (type == 4) // Emergency stop
                         {
-                            message += ConnectionControl.SkpApiClient.GetTranslation("EmergencyStop", _container.OperatorLanguage);
+                            message += Controller.GetTranslation("EmergencyStop", _container.OperatorLanguage);
                             code = 4025;
                         }
                         else if (type == 5) // Motorschutz
                         {
-                            message += ConnectionControl.SkpApiClient.GetTranslation("MotorProtection", _container.OperatorLanguage);
+                            message += Controller.GetTranslation("MotorProtection", _container.OperatorLanguage);
                             code = 4030;
                         }
                         else if (type == 6) // Störung
                         {
-                            message += ConnectionControl.SkpApiClient.GetTranslation("Malfunction", _container.OperatorLanguage);
+                            message += Controller.GetTranslation("Malfunction", _container.OperatorLanguage);
                             code = 3492;
                         }
                         else if (type == 10)
@@ -1694,11 +1830,11 @@ namespace ConnectionService
                         String smsMessage = "\nIdent Nr.: " + _container.IdentString + "\n";
                         smsMessage += message + "\n";
 
-                        smsMessage += ConnectionControl.SkpApiClient.GetTranslation("Material", _container.OperatorLanguage) + ": " + _location.MaterialName + "\n";
+                        smsMessage += Controller.GetTranslation("Material", _container.OperatorLanguage) + ": " + _location.MaterialName + "\n";
 
-                        smsMessage += ConnectionControl.SkpApiClient.GetTranslation("Operator", _container.OperatorLanguage) + ": " + _container.OperatorName + "\n";
+                        smsMessage += Controller.GetTranslation("Operator", _container.OperatorLanguage) + ": " + _container.OperatorName + "\n";
 
-                        smsMessage += ConnectionControl.SkpApiClient.GetTranslation("Location", _container.OperatorLanguage) + ": " + _location.Name + "\n";
+                        smsMessage += Controller.GetTranslation("Location", _container.OperatorLanguage) + ": " + _location.Name + "\n";
 
                         double lat = (double)_location.Latitude;
                         double lng = (double)_location.Longitude;
@@ -1852,6 +1988,82 @@ namespace ConnectionService
             return false;
         }
 
+        private bool ProcessEmptying(string strIdent)
+        {
+            strIdent = strIdent.Substring(6);
+            double lat = 0.0F, lng = 0.0F;
+            int posComma = 0;
+            int preferedMaterialId = -1;
+
+            if ((posComma = strIdent.IndexOf(',')) != -1)
+            {
+                try
+                {
+                    string[] toks = strIdent.Split(new char[] { ',' });
+                    if (toks.GetLength(0) > 2)
+                    {
+                        _container.ModemFirmwareVersion = toks[1].Trim();
+                        _container.ControllerFirmwareVersion = toks[2].Trim();
+                        _container.ModemSignalQuality = System.Convert.ToUInt16(toks[3].Trim());
+                        lat = System.Convert.ToDouble(toks[4].Trim(), CultureInfo.InvariantCulture);
+                        lng = System.Convert.ToDouble(toks[5].Trim(), CultureInfo.InvariantCulture);
+
+                        if (toks.GetLength(0) > 6)
+                        {
+                            _container.SupplyVoltage = System.Convert.ToInt32(toks[6].Trim());
+                        }
+
+                        if (toks.GetLength(0) > 7)
+                        {
+                            preferedMaterialId = System.Convert.ToInt32(toks[7].Trim());
+                        }
+
+                        if (toks.GetLength(0) > 8)
+                        {
+                            _container.ActualFillingLevel = 0;
+                        }
+                    }
+                }
+                catch (Exception excp)
+                {
+                    LogFile.WriteErrorToLogFile("Exception: {0}, while trying to parse identify string", excp.Message);
+                }
+
+                _container.IccId = strIdent.Substring(0, posComma);
+
+                LogFile.WriteMessageToLogFile("Get container parameters for IccId: {0}", _container.IccId);
+                ContainerParamsDto contParams = (ContainerParamsDto)ConnectionControl.SkpApiClient.GetContainerParams(_container.IccId);
+
+                _container.ContainerId = (int)contParams.Id;
+
+                try
+                {
+                    UpdateGeoPosition newGeoPos = new UpdateGeoPosition(lat, lng);
+                    ConnectionControl.SkpApiClient.UpdateContainerGeoPosition(_container.ContainerId, newGeoPos);
+                }
+                catch (Exception excp)
+                {
+                    LogFile.WriteErrorToLogFile("{0}: Exception: {1}, while trying to update container geo position: {2}, {3}", this.Name, excp.Message, lat, lng);
+                }
+
+                try
+                {
+                    ConnectionControl.SkpApiClient.RemoveContainerFromAllLocations(_container.ContainerId);
+                }
+                catch (Exception excp)
+                {
+                    LogFile.WriteErrorToLogFile("{0}: Exception: {1}, while trying to update container geo position: {2}, {3}", this.Name, excp.Message, lat, lng);
+                }
+            }
+            else
+            {
+                LogFile.WriteErrorToLogFile("Invalid identification string: {0}", strIdent);
+                return false;
+            }
+
+            return true;
+        }
+
         private bool GetContainerAndLocation(string strIdent)
         {
             bool retval = true;
@@ -1911,6 +2123,48 @@ namespace ConnectionService
                 {
                     LogFile.WriteMessageToLogFile("Get container parameters for IccId: {0}", _container.IccId);
                     ContainerParamsDto contParams = (ContainerParamsDto)ConnectionControl.SkpApiClient.GetContainerParams(_container.IccId);
+                    SkpContainerFeaturesDto contFeatures = (SkpContainerFeaturesDto)ConnectionControl.SkpApiClient.GetContainerMachineData((int)contParams.Id);
+
+                    var singlefeatureList =  contFeatures.SingleValue;
+
+                    LogFile.WriteMessageToLogFile("{0}: SingleFeatures: {1}", this.Name, singlefeatureList.Count);
+
+                    foreach (string feature in singlefeatureList.Values)
+                    {
+                        LogFile.WriteMessageToLogFile("{0}:  Feature: {1}", this.Name, feature);
+
+                        if (feature.IndexOf("Hubkipp Grundausstattung") != -1)
+                        {
+                            _container.IsLiftTiltEquipped = true;
+                        }
+                        else if (feature.IndexOf("Bedienung_Lichtschrankensteuerung") != -1)
+                        {
+                            _container.IsExternalStartEquipped = true;
+                        }
+                    }
+
+                    var multifeatureList = contFeatures.MultipleValue;
+
+                    LogFile.WriteMessageToLogFile("MultiFeatures: {0}", multifeatureList.Count);
+
+                    foreach (List<string> featureList in multifeatureList.Values)
+                    {
+                        foreach (string feature in featureList)
+                        {
+                            LogFile.WriteMessageToLogFile("{0}:  Feature: {1}", this.Name, feature);
+
+                            if (feature.IndexOf("Hubkipp Grundausstattung") != -1)
+                            {
+                                _container.IsLiftTiltEquipped = true;
+                            }
+                            else if (feature.IndexOf("Bedienung_Lichtschrankensteuerung") != -1)
+                            {
+                                _container.IsExternalStartEquipped = true;
+                            }
+                        }
+                    }
+
+                    _container.IsRetroFit = (bool)contParams.Retrofit;
 
                     _container.ContainerId = (int)contParams.Id;
                     this.Name = String.Format("ContainerID {0}:", _container.ContainerId);
@@ -1921,9 +2175,10 @@ namespace ConnectionService
                     _container.ReadPointer = (int)contParams.ReadPointer;
                     _container.WritePointer = (int)contParams.WritePointer;
                     _container.OperatorId = (int)contParams.OperatorId;
+                    
 
-                    LogFile.WriteMessageToLogFile("{0}: Found parameters: {1}, {2}, {3}, {4}, {5}, {6}, {7},", this.Name, _container.MobileNumber, _container.IdentString, _container.DeviceNumber,
-                        _container.FirmwareVersion, _container.OperatorId, _container.WritePointer, _container.ReadPointer);
+                    LogFile.WriteMessageToLogFile("{0}: Found parameters: {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}", this.Name, _container.MobileNumber, _container.IdentString, _container.DeviceNumber,
+                        _container.FirmwareVersion, _container.OperatorId, _container.WritePointer, _container.ReadPointer, contParams.Retrofit);
 
                     // get operator name
                     OperatorParamsDto opParams = ConnectionControl.SkpApiClient.GetOperatorParams(_container.OperatorId);
@@ -1951,7 +2206,6 @@ namespace ConnectionService
                         loc.LocationId = (int)location.LocationId;
                         loc.Name = location.Name;
                         //                        loc.MaterialId = (int)location.LocationTypeId;
-                        _location.MaterialName = location.FractionName;
 
                         loc.Latitude = (double)location.Latitude;
                         loc.Longitude = (double)location.Longitude;
@@ -2000,6 +2254,17 @@ namespace ConnectionService
 
                         LogFile.WriteMessageToLogFile("{0}: Location: {1}, deviation is lat: {2}, long: {3}", this.Name, loc.LocationId, devLat, devLng);
 
+                        if (contParams.PreferredLocation != null && loc.LocationId == contParams.PreferredLocation.LocationId)
+                        {
+                            SkpLocationDto locationDto = ConnectionControl.SkpApiClient.GetLocationById(loc.LocationId);
+                            loc.MaterialName = locationDto.FractionName;
+
+                            bestLocation = loc;
+
+                            LogFile.WriteMessageToLogFile("{0}: Found preferred location ({1}:{2}:{3})", this.Name, loc.LocationId, loc.Name, loc.MaterialName);
+                            break;
+                        }
+
                         if (devLat < minDevLat && devLng < minDevLong)
                         {
                             minDevLat = devLat;
@@ -2019,6 +2284,9 @@ namespace ConnectionService
 
                         UpdateContainer updateContainer = new UpdateContainer(_container.ContainerId);
                         ConnectionControl.SkpApiClient.UpdateLocationContainer(_location.LocationId, updateContainer);
+
+                        _location.IsRetroKitEquipped = _container.IsRetroFit;
+                        _location.IsLiftTiltEquipped = _container.IsLiftTiltEquipped;
                     }
                     else
                     {
@@ -2111,7 +2379,12 @@ namespace ConnectionService
                         case _CLIENT_STATE.INIT:
                             if (_receivedFrames.Count > 0 && (str = getFrame("%NUM")) != "")
                             {
-                                if (GetContainerAndLocation(str))
+                                if (str.IndexOf("%NUME") != -1)
+                                {
+                                    ProcessEmptying(str);
+                                    state = _CLIENT_STATE.STOP;
+                                }
+                                else if (GetContainerAndLocation(str))
                                 {
                                     _bIdentified = true;
 
@@ -2119,9 +2392,10 @@ namespace ConnectionService
                                         this.Name, _container.IdentString, _container.ContainerId, _location.LocationId, _location.MaterialName,
                                         _container.MobileNumber, _location.PressStrokes, _location.FullWarningLevel, _location.FullErrorLevel);
 
-                                    string strCommand = String.Format("#CON={0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12},{13},{14},{15},{16},", _destTime.ToString("ddMMyyyy"), _destTime.ToString("HHmmss"),
+                                    string strCommand = String.Format("#CON={0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12},{13},{14},{15},{16},{17}", _destTime.ToString("ddMMyyyy"), _destTime.ToString("HHmmss"),
                                         _container.ContainerId, _container.OperatorId, _location.MaterialId, _container.MobileNumber, _location.PressStrokes, _location.PressPosition ? 1 : 0, _location.FullWarningLevel, _location.FullErrorLevel,
-                                        _container.FirmwareVersion, _location.NightLockStart, _location.NightLockDuration, _container.ContainerTypeId, _location.MachineUtilization, _location.IsLiftTiltEquipped ? 1 : 0, _location.IsRetroKitEquipped ? 1 : 0);
+                                        _container.FirmwareVersion, _location.NightLockStart, _location.NightLockDuration, _container.ContainerTypeId, _location.MachineUtilization,
+                                        _location.IsLiftTiltEquipped ? 1 : 0, _location.IsRetroKitEquipped ? 1 : 0, _container.IsExternalStartEquipped ? 1: 0);
 
                                     if (SendCommand(strCommand))
                                         state = _CLIENT_STATE.WAIT_CONFIG_ACK;
@@ -2376,6 +2650,6 @@ namespace ConnectionService
                 _tcpClient.Close();
         }
 
-#endregion
+        #endregion
     }
 }

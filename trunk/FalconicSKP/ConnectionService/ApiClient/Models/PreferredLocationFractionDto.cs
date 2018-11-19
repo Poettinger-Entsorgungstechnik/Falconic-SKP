@@ -23,9 +23,10 @@ namespace Falconic.Skp.Api.Client.Models
         /// Initializes a new instance of the PreferredLocationFractionDto
         /// class.
         /// </summary>
-        public PreferredLocationFractionDto(int? locationId = default(int?), double? latitude = default(double?), double? longitude = default(double?))
+        public PreferredLocationFractionDto(int? locationId = default(int?), System.Guid? fractionId = default(System.Guid?), double? latitude = default(double?), double? longitude = default(double?))
         {
             LocationId = locationId;
+            FractionId = fractionId;
             Latitude = latitude;
             Longitude = longitude;
             CustomInit();
@@ -40,6 +41,11 @@ namespace Falconic.Skp.Api.Client.Models
         /// </summary>
         [JsonProperty(PropertyName = "locationId")]
         public int? LocationId { get; set; }
+
+        /// <summary>
+        /// </summary>
+        [JsonProperty(PropertyName = "fractionId")]
+        public System.Guid? FractionId { get; set; }
 
         /// <summary>
         /// </summary>
