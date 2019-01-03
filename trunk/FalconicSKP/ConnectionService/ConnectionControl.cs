@@ -312,7 +312,7 @@ namespace ConnectionService
                                 loc.IsLiftTiltEquipped = (liftTiltEquipped == 1);
                                 loc.IsRetroKitEquipped = (isRetroKit == 1);
 
-                                LogFile.WriteMessageToLogFile("{0}: Add data from 2.0 database: {1}, {2}, {3}, {4}, {5}, {6}, {7}", String.Format("ContainerID {0}", containerId), 
+                                LogFile.WriteMessageToLogFile("{0}: Add data from 2.0 database: {1}, {2}, {3}, {4}, {5}, {6}, {7}", String.Format("ContainerID {0}", containerId),
                                     loc.PressStrokes, loc.PressPosition, loc.FullWarningLevel, loc.FullErrorLevel,
                                     loc.MachineUtilization, loc.IsLiftTiltEquipped, loc.IsRetroKitEquipped);
 
@@ -364,7 +364,7 @@ namespace ConnectionService
 
             return retval;
         }
-     
+
         #endregion
 
         #region static methods
@@ -825,6 +825,8 @@ namespace ConnectionService
         private bool _bIsRetroFit;
         private bool _bIsLiftTiltEquipped;
         private bool _bIsExternalStartEquipped;
+        private bool _bIs2DotZero;
+        private bool _pressPosition;                // position where press should stop 0 ... back, 1 ... front 
 
         #endregion
 
@@ -871,6 +873,8 @@ namespace ConnectionService
         public bool IsRetroFit { get => _bIsRetroFit; set => _bIsRetroFit = value; }
         public bool IsLiftTiltEquipped { get => _bIsLiftTiltEquipped; set => _bIsLiftTiltEquipped = value; }
         public bool IsExternalStartEquipped { get => _bIsExternalStartEquipped; set => _bIsExternalStartEquipped = value; }
+        public bool PressPosition { get => _pressPosition; set => _pressPosition = value; }
+        public bool Is2DotZero { get => _bIs2DotZero; set => _bIs2DotZero = value; }
 
         #endregion
 
@@ -883,6 +887,7 @@ namespace ConnectionService
             ControllerFirmwareVersion = "unknown";
             IsRetroFit = false;
             IsLiftTiltEquipped = false;
+            Is2DotZero = false;
         }
 
 #endregion
@@ -912,6 +917,7 @@ namespace ConnectionService
         private int _WatchdogDuration;
         private bool _bValid;                       // is location valid (operatorId =)
         private int _machineUtilization;
+        private Guid? _preferredFractionId;      
 
         // members only for 2.0 containers
         private bool _bLiftTiltEquipped;
@@ -942,6 +948,7 @@ namespace ConnectionService
         public int MachineUtilization { get => _machineUtilization; set => _machineUtilization = value; }
         public bool IsLiftTiltEquipped { get => _bLiftTiltEquipped; set => _bLiftTiltEquipped = value; }
         public bool IsRetroKitEquipped { get => _bRetroKitEquipped; set => _bRetroKitEquipped = value; }
+        public Guid? PreferredFractionId { get => _preferredFractionId; set => _preferredFractionId = value; }
 
         #endregion
 
@@ -2121,6 +2128,8 @@ namespace ConnectionService
 
                 try
                 {
+                    Location virtLocation = new Location();     // vitual Location object if no location for container was found
+
                     LogFile.WriteMessageToLogFile("Get container parameters for IccId: {0}", _container.IccId);
                     ContainerParamsDto contParams = (ContainerParamsDto)ConnectionControl.SkpApiClient.GetContainerParams(_container.IccId);
                     SkpContainerFeaturesDto contFeatures = (SkpContainerFeaturesDto)ConnectionControl.SkpApiClient.GetContainerMachineData((int)contParams.Id);
@@ -2140,6 +2149,21 @@ namespace ConnectionService
                         else if (feature.IndexOf("Bedienung_Lichtschrankensteuerung") != -1)
                         {
                             _container.IsExternalStartEquipped = true;
+                        }
+                        else if (feature.IndexOf("Pressenstellung") != -1)
+                        {
+                            if (feature.IndexOf("offen") != -1)
+                            {
+                                _container.PressPosition = false; // back (open)
+                            }
+                            else
+                            {
+                                _container.PressPosition = true; // front (closed)
+                            }
+                        }
+                        else if (feature.IndexOf("Schaltschrank 2.0") != -1)
+                        {
+                            _container.Is2DotZero = true;
                         }
                     }
 
@@ -2161,6 +2185,20 @@ namespace ConnectionService
                             {
                                 _container.IsExternalStartEquipped = true;
                             }
+                            else if (feature.IndexOf("Druckeinst.") != -1)
+                            {
+                                if (feature.IndexOf("hohe Dichte") != -1)
+                                {
+                                    virtLocation.FullWarningLevel = 75;
+                                    virtLocation.FullErrorLevel = 90;
+                                    virtLocation.MachineUtilization = 70;
+                                }
+                                else
+                                {
+                                    virtLocation.FullWarningLevel = 60;
+                                    virtLocation.FullErrorLevel = 60;
+                                }
+                            }
                         }
                     }
 
@@ -2171,12 +2209,11 @@ namespace ConnectionService
                     _container.MobileNumber = contParams.GsmNumber;
                     _container.IdentString = contParams.InternalIdentNumber;
                     _container.DeviceNumber = contParams.DeviceNumber;
-                    _container.FirmwareVersion = contParams.FirmwareVersion;
+                    _container.FirmwareVersion = "unknown"; // contParams.FirmwareVersion; // 19.12.2018 - at the moment not used
                     _container.ReadPointer = (int)contParams.ReadPointer;
                     _container.WritePointer = (int)contParams.WritePointer;
                     _container.OperatorId = (int)contParams.OperatorId;
                     
-
                     LogFile.WriteMessageToLogFile("{0}: Found parameters: {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}", this.Name, _container.MobileNumber, _container.IdentString, _container.DeviceNumber,
                         _container.FirmwareVersion, _container.OperatorId, _container.WritePointer, _container.ReadPointer, contParams.Retrofit);
 
@@ -2197,79 +2234,161 @@ namespace ConnectionService
                         LogFile.WriteErrorToLogFile("{0}: Exception: {1}, while trying to update container geo position: {2}, {3}", this.Name, excp.Message, lat, lng);
                     }
 
-                    LogFile.WriteMessageToLogFile("{0}: Get locations for this geopos", this.Name);
-
-                    foreach (var location in ConnectionControl.SkpApiClient.GetLocationsForOperator(_container.OperatorId, new GetSkpLocations { MinLatitude = lat - 0.0020F, MaxLatitude = lat + 0.0020F, MinLongitude = lng - 0.002F, MaxLongitude = lng + 0.002F }))
+                    if (_container.Is2DotZero)
                     {
-                        Location loc = new Location();
+                        LogFile.WriteMessageToLogFile("{0}: Machine is of type: Schaltschrank 2.0", this.Name);
+                    }
+                    else
+                    {
 
-                        loc.LocationId = (int)location.LocationId;
-                        loc.Name = location.Name;
-                        //                        loc.MaterialId = (int)location.LocationTypeId;
+                        LogFile.WriteMessageToLogFile("{0}: Get locations for this geopos", this.Name);
 
-                        loc.Latitude = (double)location.Latitude;
-                        loc.Longitude = (double)location.Longitude;
-                        loc.IsWatchdogActive = (bool)location.LocationMonitoringActive;
-                        loc.PressStrokes = (int)location.NumberOfPresses;
-                        loc.PressPosition = (bool)location.PressPosition;
-                        loc.MachineUtilization = (int)location.MachineUtilization;
-                        loc.FullErrorLevel = (int)location.PercentFullMessage;
-                        loc.FullWarningLevel = (int)location.PercentPreFullMessage;
-
-                        if (location.NightLockStart.HasValue && location.NightLockStop.HasValue)
+                        foreach (var location in ConnectionControl.SkpApiClient.GetLocationsForOperator(_container.OperatorId, new GetSkpLocations { MinLatitude = lat - 0.0020F, MaxLatitude = lat + 0.0020F, MinLongitude = lng - 0.002F, MaxLongitude = lng + 0.002F }))
                         {
-                            DateTime nlStart = (DateTime)location.NightLockStart;
-                            DateTime nlStop = (DateTime)location.NightLockStop;
-                            if (nlStop < nlStart)
+                            Location loc = new Location();
+
+                            loc.LocationId = (int)location.LocationId;
+                            loc.Name = location.Name;
+                            //                        loc.MaterialId = (int)location.LocationTypeId;
+
+
+                            loc.Latitude = (double)location.Latitude;
+                            loc.Longitude = (double)location.Longitude;
+                            loc.IsWatchdogActive = (bool)location.LocationMonitoringActive;
+                            loc.PressStrokes = (int)location.NumberOfPresses;
+                            loc.PressPosition = (bool)location.PressPosition;
+                            loc.MachineUtilization = (int)location.MachineUtilization;
+                            loc.FullErrorLevel = (int)location.PercentFullMessage;
+                            loc.FullWarningLevel = (int)location.PercentPreFullMessage;
+                            loc.PreferredFractionId = location.FractionId;
+
+                            if (location.NightLockStart.HasValue && location.NightLockStop.HasValue)
                             {
-                                nlStop = nlStop.AddDays(1);
+                                DateTime nlStart = (DateTime)location.NightLockStart;
+                                DateTime nlStop = (DateTime)location.NightLockStop;
+                                if (nlStop < nlStart)
+                                {
+                                    nlStop = nlStop.AddDays(1);
+                                }
+
+                                TimeSpan ts = nlStop.Subtract(nlStart);
+
+                                loc.NightLockStart = nlStart.Hour * 60 + nlStart.Minute;
+                                loc.NightLockEnd = nlStop.Hour * 60 + nlStop.Minute;
+                                loc.NightLockDuration = (int)ts.TotalMinutes;
+                            }
+                            else
+                            {
+                                loc.NightLockStart = 0;
+                                loc.NightLockDuration = 0;
                             }
 
-                            TimeSpan ts = nlStop.Subtract(nlStart);
-
-                            loc.NightLockStart = nlStart.Hour * 60 + nlStart.Minute;
-                            loc.NightLockEnd = nlStop.Hour * 60 + nlStop.Minute;
-                            loc.NightLockDuration = (int)ts.TotalMinutes;
+                            locations.Add(loc);
                         }
-                        else
+
+
+                        LogFile.WriteMessageToLogFile("{0}: Found {1} locations within search area.", this.Name, locations.Count);
+                    }
+
+                    //double minDevLat = 90.0F;
+                    //double minDevLong = 180.0F;
+                    Location bestLocation = null;
+
+
+                    // check for preferred location if available
+                    if (contParams.PreferredLocation != null)
+                    {
+                        foreach (Location loc in locations)
                         {
-                            loc.NightLockStart = 0;
-                            loc.NightLockDuration = 0;
+                            if (loc.LocationId == contParams.PreferredLocation.LocationId)
+                            {
+                                SkpLocationDto locationDto = ConnectionControl.SkpApiClient.GetLocationById(loc.LocationId);
+                                loc.MaterialName = locationDto.FractionName;
+
+                                bestLocation = loc;
+
+                                LogFile.WriteMessageToLogFile("{0}: Found preferred location ({1}:{2}:{3})", this.Name, loc.LocationId, loc.Name, loc.MaterialName);
+                                break;
+                            }
                         }
 
-                        locations.Add(loc);
+                        // check for preferred fractionId if available if still no location is valid
+                        if (bestLocation == null && contParams.PreferredLocation.FractionId != null)
+                        {
+                            foreach (Location loc in locations)
+                            {
+                                if (loc.PreferredFractionId == contParams.PreferredLocation.FractionId)
+                                {
+                                    SkpLocationDto locationDto = ConnectionControl.SkpApiClient.GetLocationById(loc.LocationId);
+                                    loc.MaterialName = locationDto.FractionName;
+
+                                    bestLocation = loc;
+
+                                    LogFile.WriteMessageToLogFile("{0}: Found preferred fraction on location ({1}:{2}:{3}:{4})", this.Name, loc.LocationId, loc.Name, loc.MaterialName,
+                                        loc.PreferredFractionId);
+
+                                    break;
+                                }
+                            }
+                        }
                     }
 
 
-                    LogFile.WriteMessageToLogFile("{0}: Found {1} locations within search area.", this.Name, locations.Count);
-
-                    double minDevLat = 90.0F;
-                    double minDevLong = 180.0F;
-                    Location bestLocation = null;
-
-                    foreach (Location loc in locations)
-                    { 
-                        double devLat = Math.Abs(lat - loc.Latitude);
-                        double devLng = Math.Abs(lng - loc.Longitude);
-
-                        LogFile.WriteMessageToLogFile("{0}: Location: {1}, deviation is lat: {2}, long: {3}", this.Name, loc.LocationId, devLat, devLng);
-
-                        if (contParams.PreferredLocation != null && loc.LocationId == contParams.PreferredLocation.LocationId)
+                    if (bestLocation == null && contParams.LastLocation != null)
+                    {
+                        foreach (Location loc in locations)
                         {
-                            SkpLocationDto locationDto = ConnectionControl.SkpApiClient.GetLocationById(loc.LocationId);
-                            loc.MaterialName = locationDto.FractionName;
+                            if (loc.LocationId == contParams.LastLocation.LocationId)
+                            {
+                                SkpLocationDto locationDto = ConnectionControl.SkpApiClient.GetLocationById(loc.LocationId);
+                                loc.MaterialName = locationDto.FractionName;
 
-                            bestLocation = loc;
+                                bestLocation = loc;
 
-                            LogFile.WriteMessageToLogFile("{0}: Found preferred location ({1}:{2}:{3})", this.Name, loc.LocationId, loc.Name, loc.MaterialName);
-                            break;
+                                LogFile.WriteMessageToLogFile("{0}: Found last location ({1}:{2}:{3})", this.Name, loc.LocationId, loc.Name, loc.MaterialName);
+                                break;
+                            }
                         }
 
-                        if (devLat < minDevLat && devLng < minDevLong)
+                        // check for preferred fractionId if available if still no location is valid
+                        if (bestLocation == null && contParams.LastLocation.FractionId != null)
                         {
-                            minDevLat = devLat;
-                            minDevLong = devLng;
-                            bestLocation = loc;
+                            foreach (Location loc in locations)
+                            {
+                                if (loc.PreferredFractionId == contParams.LastLocation.FractionId)
+                                {
+                                    SkpLocationDto locationDto = ConnectionControl.SkpApiClient.GetLocationById(loc.LocationId);
+                                    loc.MaterialName = locationDto.FractionName;
+
+                                    bestLocation = loc;
+
+                                    LogFile.WriteMessageToLogFile("{0}: Found last fraction on location ({1}:{2}:{3}:{4})", this.Name, loc.LocationId, loc.Name, loc.MaterialName,
+                                        loc.PreferredFractionId);
+
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (bestLocation == null && !_container.Is2DotZero)
+                    {
+                        double minDevLat = 90.0F;
+                        double minDevLong = 180.0F;
+
+                        foreach (Location loc in locations)
+                        {
+                            double devLat = Math.Abs(lat - loc.Latitude);
+                            double devLng = Math.Abs(lng - loc.Longitude);
+
+                            LogFile.WriteMessageToLogFile("{0}: Location: {1}, deviation is lat: {2}, long: {3}", this.Name, loc.LocationId, devLat, devLng);
+
+                            if (devLat < minDevLat && devLng < minDevLong)
+                            {
+                                minDevLat = devLat;
+                                minDevLong = devLng;
+                                bestLocation = loc;
+                            }
                         }
                     }
 
@@ -2293,23 +2412,33 @@ namespace ConnectionService
                         LogFile.WriteMessageToLogFile("{0}: No location found within specified area!", this.Name);
                         ConnectionControl.SkpApiClient.RemoveContainerFromAllLocations(_container.ContainerId);
 
-                        // try to get standard parameters for container from 2.0 machine configuration database
-                        // there are containers listet which do not have falconic website support
-                        // these are configured with a simple text file
-                        Location loc = _controller.Get2DotZeroLocation(_container.ContainerId);
-                        if (loc != null)
+                        if (_container.Is2DotZero)
                         {
-                            _location.FullErrorLevel = loc.FullErrorLevel;
-                            _location.FullWarningLevel = loc.FullWarningLevel;
-                            _location.IsLiftTiltEquipped = loc.IsLiftTiltEquipped;
-                            _location.IsRetroKitEquipped = loc.IsRetroKitEquipped;
-                            _location.MachineUtilization = loc.MachineUtilization;
-                            _location.PressPosition = loc.PressPosition;
-                            _location.PressStrokes = loc.PressStrokes;
+                            // try to get standard parameters for container from 2.0 machine configuration database
+                            // there are containers listet which do not have falconic website support
+                            // these are configured with a simple text file
+                            Location loc = _controller.Get2DotZeroLocation(_container.ContainerId);
+                            if (loc != null)
+                            {
+                                _location.FullErrorLevel = loc.FullErrorLevel;
+                                _location.FullWarningLevel = loc.FullWarningLevel;
+                                _location.IsLiftTiltEquipped = loc.IsLiftTiltEquipped;
+                                _location.IsRetroKitEquipped = loc.IsRetroKitEquipped;
+                                _location.MachineUtilization = loc.MachineUtilization;
+                                _location.PressPosition = loc.PressPosition;
+                                _location.PressStrokes = loc.PressStrokes;
 
-                            LogFile.WriteMessageToLogFile("{0}: Take data from 2.0 database: {1}, {2}, {3}, {4}, {5}, {6}, {7}", this.Name,
-                                _location.PressStrokes, _location.PressPosition, _location.FullWarningLevel, _location.FullErrorLevel,
-                                _location.MachineUtilization, _location.IsLiftTiltEquipped, _location.IsRetroKitEquipped);                               
+                                LogFile.WriteMessageToLogFile("{0}: Take data from 2.0 database: {1}, {2}, {3}, {4}, {5}, {6}, {7}", this.Name,
+                                    _location.PressStrokes, _location.PressPosition, _location.FullWarningLevel, _location.FullErrorLevel,
+                                    _location.MachineUtilization, _location.IsLiftTiltEquipped, _location.IsRetroKitEquipped);
+                            }
+                        }
+                        else
+                        { 
+                            _location = virtLocation;
+                            _location.IsLiftTiltEquipped = _container.IsLiftTiltEquipped;
+                            _location.IsRetroKitEquipped = _container.IsRetroFit;
+                            _location.PressPosition = _container.PressPosition;
                         }
                     }
 
@@ -2350,7 +2479,7 @@ namespace ConnectionService
 
 #endregion
 
-        #region Thread routines
+#region Thread routines
 
         /// <summary>
         /// SKP connection state machine
@@ -2483,7 +2612,8 @@ namespace ConnectionService
                         case _CLIENT_STATE.READ_JOURNAL:
                             if (_receivedFrames.Count > 0 && (str = getFrame("%JOU=")) != "")
                             {
-                                ParseJournalEntries(str, numberOfExpectedEntries);
+//                                if (!_container.Is2DotZero)   // removed 03.01.2019 see #565
+                                    ParseJournalEntries(str, numberOfExpectedEntries);
                                 int newReadPointer = _container.ReadPointer + numberOfExpectedEntries;
 
                                 if (newReadPointer >= _container.JournalSize)
@@ -2650,6 +2780,6 @@ namespace ConnectionService
                 _tcpClient.Close();
         }
 
-        #endregion
+#endregion
     }
 }
