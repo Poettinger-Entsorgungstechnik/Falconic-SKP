@@ -25,6 +25,15 @@ using Falconic.Messaging.DTOs;
 using Falconic.Messaging.Exceptions;
 using Microsoft.Azure.ServiceBus;
 using Newtonsoft.Json;
+using System.Diagnostics;
+
+//   Version History:
+
+
+    //  1.0.1.11         -       03.01.2019 
+    //                          - # 565: Store 2-0 Events also.
+    //                          - # 569: Removed Version information in message to container to avoid automatic firmware downgrade. 
+
 
 namespace ConnectionService
 {
@@ -190,7 +199,11 @@ namespace ConnectionService
             String serviceBusConnectionString = "Endpoint=sb://falconic.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=s3/BE9xHzVzMaG91Omzay9+erI8v3fnI3iY21rkf5go=";
             String queueName = "skp-notification";
 
-            LogFile.WriteMessageToLogFile("ConnectionControl: {0}", processId);
+            System.Reflection.Assembly assembly = System.Reflection.Assembly.GetExecutingAssembly();
+            FileVersionInfo fvi = FileVersionInfo.GetVersionInfo(assembly.Location);
+            string version = fvi.FileVersion;
+
+            LogFile.WriteMessageToLogFile("ConnectionControl Version: {0}, ProcessId: {1}", version, processId);
 
             System.Management.ManagementObjectSearcher searcher =
                     new System.Management.ManagementObjectSearcher(query);
