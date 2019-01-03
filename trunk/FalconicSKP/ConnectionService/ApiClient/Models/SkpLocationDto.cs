@@ -21,11 +21,12 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// Initializes a new instance of the SkpLocationDto class.
         /// </summary>
-        public SkpLocationDto(int? locationId = default(int?), string name = default(string), string fractionName = default(string), double? latitude = default(double?), double? longitude = default(double?), bool? locationMonitoringActive = default(bool?), bool? nightLockActive = default(bool?), System.DateTime? nightLockStart = default(System.DateTime?), System.DateTime? nightLockStop = default(System.DateTime?), int? percentFullMessage = default(int?), int? percentPreFullMessage = default(int?), int? numberOfPresses = default(int?), bool? pressPosition = default(bool?), int? machineUtilization = default(int?))
+        public SkpLocationDto(int? locationId = default(int?), string name = default(string), string fractionName = default(string), System.Guid? fractionId = default(System.Guid?), double? latitude = default(double?), double? longitude = default(double?), bool? locationMonitoringActive = default(bool?), bool? nightLockActive = default(bool?), System.DateTime? nightLockStart = default(System.DateTime?), System.DateTime? nightLockStop = default(System.DateTime?), int? percentFullMessage = default(int?), int? percentPreFullMessage = default(int?), int? numberOfPresses = default(int?), bool? pressPosition = default(bool?), int? machineUtilization = default(int?))
         {
             LocationId = locationId;
             Name = name;
             FractionName = fractionName;
+            FractionId = fractionId;
             Latitude = latitude;
             Longitude = longitude;
             LocationMonitoringActive = locationMonitoringActive;
@@ -59,6 +60,11 @@ namespace Falconic.Skp.Api.Client.Models
         /// </summary>
         [JsonProperty(PropertyName = "fractionName")]
         public string FractionName { get; set; }
+
+        /// <summary>
+        /// </summary>
+        [JsonProperty(PropertyName = "fractionId")]
+        public System.Guid? FractionId { get; set; }
 
         /// <summary>
         /// </summary>
