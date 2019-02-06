@@ -29,10 +29,13 @@ using System.Diagnostics;
 
 //   Version History:
 
+//  1.0.1.12         -       06.02.2019 
+//                          - # 612: Machine Firmwareupdate triggered by server.
 
-    //  1.0.1.11         -       03.01.2019 
-    //                          - # 565: Store 2-0 Events also.
-    //                          - # 569: Removed Version information in message to container to avoid automatic firmware downgrade. 
+
+//  1.0.1.11         -       03.01.2019 
+//                          - # 565: Store 2-0 Events also.
+//                          - # 569: Removed Version information in message to container to avoid automatic firmware downgrade. 
 
 
 namespace ConnectionService
@@ -58,6 +61,8 @@ namespace ConnectionService
 //        static string _apiUrlDev = "https://falconic-skp-api-dev.azurewebsites.net";
         static string _apiUrlTest = "https://falconic-skp-api-test.azurewebsites.net";
 
+
+        public static string ActualModemFirmwareVersion = "unknown";
 
         public static ISkpAPIv10 SkpApiClient = null; // new SkpAPIv10(new Uri(_apiUrl), new ApiKeyDelegatingHandler(_apiId, _apiKey));
 
@@ -304,7 +309,21 @@ namespace ConnectionService
                             {
                                 string[] lineToks = line.Split(new char[] { ',' });
 
-                                if (line.StartsWith("#") || line == "") continue;
+                                if (line == "") continue;
+                                if (line.StartsWith("#"))
+                                {
+                                    // we also set here for the moment the firmwareversion which should be installed on all machines
+                                    int pos = line.IndexOf("ActualFirmwareVersion");
+                                    if (pos != -1)
+                                    {
+                                        pos = line.IndexOf(":", pos);
+                                        if (pos != -1)
+                                        {
+                                            ActualModemFirmwareVersion = line.Substring(pos + 1).Trim();
+                                        }
+                                    }
+                                    continue;
+                                }
 
                                 int containerId = Convert.ToInt32(lineToks[0].Trim());
                                 int pressStrokes = Convert.ToInt32(lineToks[1].Trim());
@@ -338,6 +357,8 @@ namespace ConnectionService
                         }
 
                         sr.Close();
+
+                        LogFile.WriteMessageToLogFile("Actual firmwareversion which should be installed on machines: ({0})", ActualModemFirmwareVersion);
                     }
                     catch (Exception excp)
                     {
@@ -2222,7 +2243,7 @@ namespace ConnectionService
                     _container.MobileNumber = contParams.GsmNumber;
                     _container.IdentString = contParams.InternalIdentNumber;
                     _container.DeviceNumber = contParams.DeviceNumber;
-                    _container.FirmwareVersion = "unknown"; // contParams.FirmwareVersion; // 19.12.2018 - at the moment not used
+                    _container.FirmwareVersion = ConnectionControl.ActualModemFirmwareVersion; // contParams.FirmwareVersion; // 19.12.2018 - at the moment not used
                     _container.ReadPointer = (int)contParams.ReadPointer;
                     _container.WritePointer = (int)contParams.WritePointer;
                     _container.OperatorId = (int)contParams.OperatorId;
