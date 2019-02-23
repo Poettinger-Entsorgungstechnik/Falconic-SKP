@@ -29,6 +29,11 @@ using System.Diagnostics;
 
 //   Version History:
 
+//  1.0.1.13         -       23.02.2019 
+//                          - # 638: 2.0 Maschinen verlieren Maschinenausstattung.
+//                          - New Api from Softaware
+
+
 //  1.0.1.12         -       06.02.2019 
 //                          - # 612: Machine Firmwareupdate triggered by server.
 
@@ -2456,8 +2461,10 @@ namespace ConnectionService
                             {
                                 _location.FullErrorLevel = loc.FullErrorLevel;
                                 _location.FullWarningLevel = loc.FullWarningLevel;
-                                _location.IsLiftTiltEquipped = loc.IsLiftTiltEquipped;
-                                _location.IsRetroKitEquipped = loc.IsRetroKitEquipped;
+
+                                _location.IsLiftTiltEquipped = _container.IsLiftTiltEquipped;   // do no more take this settings from database because it is comming from system features
+                                _location.IsRetroKitEquipped = _container.IsRetroFit;  // do no more take this settings from database because it is comming from system features
+
                                 _location.MachineUtilization = loc.MachineUtilization;
                                 _location.PressPosition = loc.PressPosition;
                                 _location.PressStrokes = loc.PressStrokes;
