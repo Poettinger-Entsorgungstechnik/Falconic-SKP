@@ -58,15 +58,11 @@
   <ItemGroup>
     <Compile Include="ApiClient\ISkpAPIv10.cs" />
     <Compile Include="ApiClient\Models\ContactMethod.cs" />
-    <Compile Include="ApiClient\Models\ContainerFeaturesDto.cs" />
     <Compile Include="ApiClient\Models\ContainerParamsDto.cs" />
     <Compile Include="ApiClient\Models\GetSkpLocations.cs" />
     <Compile Include="ApiClient\Models\LastCommunicationResult.cs" />
-    <Compile Include="ApiClient\Models\LocationParamsDto.cs" />
-    <Compile Include="ApiClient\Models\LocationTypeDto.cs" />
     <Compile Include="ApiClient\Models\OperatorParamsDto.cs" />
     <Compile Include="ApiClient\Models\PreferredLocationFractionDto.cs" />
-    <Compile Include="ApiClient\Models\SkpContainerDto.cs" />
     <Compile Include="ApiClient\Models\SkpContainerFeaturesDto.cs" />
     <Compile Include="ApiClient\Models\SkpLocationDto.cs" />
     <Compile Include="ApiClient\Models\SkpNotificationContactDto.cs" />

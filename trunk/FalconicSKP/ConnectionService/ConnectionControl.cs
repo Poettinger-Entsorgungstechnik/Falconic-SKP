@@ -1716,7 +1716,7 @@ namespace ConnectionService
 
                         LogFile.WriteMessageToLogFile("{0}: Stored Event: {1}, time: {2}", this.Name, code, date);
 
-                        statusMsgList.Add(new StatusMessageDto(code, _container.ActualFillingLevel, date.ToUniversalTime(), true));
+                        statusMsgList.Add(new StatusMessageDto(code, date.ToUniversalTime(), _container.ActualFillingLevel, true));
 
                         string message = Controller.GetTranslation("Message", _container.OperatorLanguage);
                         message += ": ";
@@ -1813,7 +1813,7 @@ namespace ConnectionService
 
                         LogFile.WriteMessageToLogFile("Event with type: {0} and time: {1}", type, time);
 
-                        statusMsgList.Add(new StatusMessageDto(code, _container.ActualFillingLevel, date.ToUniversalTime(), true));
+                        statusMsgList.Add(new StatusMessageDto(code, date.ToUniversalTime(), _container.ActualFillingLevel, true));
 
                         string message = Controller.GetTranslation("Message", _container.OperatorLanguage);
                         message += ": ";
