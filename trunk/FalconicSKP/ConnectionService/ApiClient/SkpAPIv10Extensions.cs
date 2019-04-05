@@ -236,6 +236,36 @@ namespace Falconic.Skp.Api.Client
             /// </param>
             /// <param name='containerId'>
             /// </param>
+            /// <param name='apiVersion'>
+            /// </param>
+            public static ContainerHardwareInformationDto GetContainerHardwareInformation(this ISkpAPIv10 operations, int containerId, string apiVersion = default(string))
+            {
+                return operations.GetContainerHardwareInformationAsync(containerId, apiVersion).GetAwaiter().GetResult();
+            }
+
+            /// <param name='operations'>
+            /// The operations group for this extension method.
+            /// </param>
+            /// <param name='containerId'>
+            /// </param>
+            /// <param name='apiVersion'>
+            /// </param>
+            /// <param name='cancellationToken'>
+            /// The cancellation token.
+            /// </param>
+            public static async Task<ContainerHardwareInformationDto> GetContainerHardwareInformationAsync(this ISkpAPIv10 operations, int containerId, string apiVersion = default(string), CancellationToken cancellationToken = default(CancellationToken))
+            {
+                using (var _result = await operations.GetContainerHardwareInformationWithHttpMessagesAsync(containerId, apiVersion, null, cancellationToken).ConfigureAwait(false))
+                {
+                    return _result.Body;
+                }
+            }
+
+            /// <param name='operations'>
+            /// The operations group for this extension method.
+            /// </param>
+            /// <param name='containerId'>
+            /// </param>
             /// <param name='storeContainerHardwareInformation'>
             /// </param>
             /// <param name='apiVersion'>

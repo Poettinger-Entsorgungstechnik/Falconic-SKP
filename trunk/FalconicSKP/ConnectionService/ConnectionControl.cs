@@ -29,6 +29,15 @@ using System.Diagnostics;
 
 //   Version History:
 
+//  1.0.1.16         -       05.04.2019 
+//                          - Feature #731: Betriebsstundenthematik bei Modultausch oder Fehlerhaften Werten
+
+//  1.0.1.15         -       18.03.2019 
+//                          - # 673: Raised search area from 0.002F to 0.003F.
+
+//  1.0.1.14         -       28.02.2019 
+//                          - # 638: 2.0 some additional changes.
+
 //  1.0.1.13         -       23.02.2019 
 //                          - # 638: 2.0 Maschinen verlieren Maschinenausstattung.
 //                          - New Api from Softaware
@@ -336,8 +345,6 @@ namespace ConnectionService
                                 int nearlyFull = Convert.ToInt32(lineToks[3].Trim());
                                 int full = Convert.ToInt32(lineToks[4].Trim());
                                 int workload = Convert.ToInt32(lineToks[5].Trim());
-                                int liftTiltEquipped = Convert.ToInt32(lineToks[6].Trim());
-                                int isRetroKit = Convert.ToInt32(lineToks[7].Trim());
 
                                 Location loc = new Location();
 
@@ -346,12 +353,12 @@ namespace ConnectionService
                                 loc.FullWarningLevel = nearlyFull;
                                 loc.FullErrorLevel = full;
                                 loc.MachineUtilization = workload;
-                                loc.IsLiftTiltEquipped = (liftTiltEquipped == 1);
-                                loc.IsRetroKitEquipped = (isRetroKit == 1);
+                                loc.IsLiftTiltEquipped = false;
+                                loc.IsRetroKitEquipped = false;
 
-                                LogFile.WriteMessageToLogFile("{0}: Add data from 2.0 database: {1}, {2}, {3}, {4}, {5}, {6}, {7}", String.Format("ContainerID {0}", containerId),
+                                LogFile.WriteMessageToLogFile("{0}: Add data from 2.0 database: {1}, {2}, {3}, {4}, {5}", String.Format("ContainerID {0}", containerId),
                                     loc.PressStrokes, loc.PressPosition, loc.FullWarningLevel, loc.FullErrorLevel,
-                                    loc.MachineUtilization, loc.IsLiftTiltEquipped, loc.IsRetroKitEquipped);
+                                    loc.MachineUtilization);
 
                                 _2DotZero_Containers.Add(containerId, loc);
                             }
@@ -404,7 +411,7 @@ namespace ConnectionService
             return retval;
         }
 
-        #endregion
+#endregion
 
         #region static methods
 
@@ -486,7 +493,7 @@ namespace ConnectionService
             }
         }
         
-        #endregion
+#endregion
         
         #region Methods
 
@@ -872,15 +879,16 @@ namespace ConnectionService
         #region Objects Members
 
         private string _modemFirmwareVersion;       // modem firmware version string
-                private string _controllerFirmwareVersion;  // controller firmware version string
-                private int _ModemSignalQuality;            // controller signal quality information
-                private int _actualFillingLevel;            // actual calculated filling level
-                private int _supplyVoltage;                 // actual supply voltage value (raw value)
-                private DbGeography _location;              // gps coordinates where container is located
-                private DateTime _tLastCommunication;       // time of last transaction
-                private int _journalSize = 0;              // max num entries in journal  
-                private int _writePointer = 0;             // actual write pointer of journal
-                private int _readPointer = 0;              // actual read pointer of journal
+        private string _controllerFirmwareVersion;  // controller firmware version string
+        private int _ModemSignalQuality;            // controller signal quality information
+        private int _actualFillingLevel;            // actual calculated filling level
+        private int _supplyVoltage;                 // actual supply voltage value (raw value)
+        private DbGeography _location;              // gps coordinates where container is located
+        private DateTime _tLastCommunication;       // time of last transaction
+        private int _journalSize = 0;               // max num entries in journal  
+        private int _writePointer = 0;              // actual write pointer of journal
+        private int _readPointer = 0;               // actual read pointer of journal
+        private bool _configrationInvalid = false;       // when configuration stored in modules flash is invalid
 
         #endregion
 
@@ -914,6 +922,7 @@ namespace ConnectionService
         public bool IsExternalStartEquipped { get => _bIsExternalStartEquipped; set => _bIsExternalStartEquipped = value; }
         public bool PressPosition { get => _pressPosition; set => _pressPosition = value; }
         public bool Is2DotZero { get => _bIs2DotZero; set => _bIs2DotZero = value; }
+        public bool IsConfigrationInvalid { get => _configrationInvalid; set => _configrationInvalid = value; }
 
         #endregion
 
@@ -989,7 +998,7 @@ namespace ConnectionService
         public bool IsRetroKitEquipped { get => _bRetroKitEquipped; set => _bRetroKitEquipped = value; }
         public Guid? PreferredFractionId { get => _preferredFractionId; set => _preferredFractionId = value; }
 
-        #endregion
+#endregion
 
         #region constructor
 
@@ -2024,7 +2033,7 @@ namespace ConnectionService
             return true;
         }
 
-        #endregion
+#endregion
 
         #region Database methods
 
@@ -2148,6 +2157,13 @@ namespace ConnectionService
                             {
                                 _container.ActualFillingLevel = System.Convert.ToInt32(toks[8].Trim());
                             }
+
+                            if (toks.GetLength(0) > 9)
+                            {
+                                _container.IsConfigrationInvalid = toks[9].Trim() == "true";
+                                LogFile.WriteMessageToLogFile("{0} Configuration invalid: {1}, {2}", this.Name, _container.IsConfigrationInvalid, toks[9].Trim());
+                            }
+
                         }
                     }
                     catch (Exception excp)
@@ -2167,7 +2183,7 @@ namespace ConnectionService
 
                 try
                 {
-                    Location virtLocation = new Location();     // vitual Location object if no location for container was found
+                    Location virtLocation = new Location();     // virtual Location object if no location for container was found
 
                     LogFile.WriteMessageToLogFile("Get container parameters for IccId: {0}", _container.IccId);
                     ContainerParamsDto contParams = (ContainerParamsDto)ConnectionControl.SkpApiClient.GetContainerParams(_container.IccId);
@@ -2193,11 +2209,11 @@ namespace ConnectionService
                         {
                             if (feature.IndexOf("offen") != -1)
                             {
-                                _container.PressPosition = false; // back (open)
+                                _container.PressPosition = true; // is inverted
                             }
                             else
                             {
-                                _container.PressPosition = true; // front (closed)
+                                _container.PressPosition = false; // is inverted
                             }
                         }
                         else if (feature.IndexOf("Schaltschrank 2.0") != -1)
@@ -2253,7 +2269,7 @@ namespace ConnectionService
                     _container.WritePointer = (int)contParams.WritePointer;
                     _container.OperatorId = (int)contParams.OperatorId;
                     
-                    LogFile.WriteMessageToLogFile("{0}: Found parameters: {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}", this.Name, _container.MobileNumber, _container.IdentString, _container.DeviceNumber,
+                    LogFile.WriteMessageToLogFile("{0} Found parameters: {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}", this.Name, _container.MobileNumber, _container.IdentString, _container.DeviceNumber,
                         _container.FirmwareVersion, _container.OperatorId, _container.WritePointer, _container.ReadPointer, contParams.Retrofit);
 
                     // get operator name
@@ -2261,7 +2277,7 @@ namespace ConnectionService
                     _container.OperatorName = opParams.OperatorName;
                     _container.OperatorLanguage = opParams.LanguageCode;
 
-                    LogFile.WriteMessageToLogFile("{0}: Operator: {1}, Language: {2}", this.Name, _container.OperatorName, opParams.LanguageCode);
+                    LogFile.WriteMessageToLogFile("{0} Operator: {1}, Language: {2}", this.Name, _container.OperatorName, opParams.LanguageCode);
 
                     try
                     {
@@ -2270,19 +2286,19 @@ namespace ConnectionService
                     }
                     catch (Exception excp)
                     {
-                        LogFile.WriteErrorToLogFile("{0}: Exception: {1}, while trying to update container geo position: {2}, {3}", this.Name, excp.Message, lat, lng);
+                        LogFile.WriteErrorToLogFile("{0} Exception: {1}, while trying to update container geo position: {2}, {3}", this.Name, excp.Message, lat, lng);
                     }
 
                     if (_container.Is2DotZero)
                     {
-                        LogFile.WriteMessageToLogFile("{0}: Machine is of type: Schaltschrank 2.0", this.Name);
+                        LogFile.WriteMessageToLogFile("{0} Machine is of type: Schaltschrank 2.0", this.Name);
                     }
                     else
                     {
 
-                        LogFile.WriteMessageToLogFile("{0}: Get locations for this geopos", this.Name);
+                        LogFile.WriteMessageToLogFile("{0} Get locations for this geopos", this.Name);
 
-                        foreach (var location in ConnectionControl.SkpApiClient.GetLocationsForOperator(_container.OperatorId, new GetSkpLocations { MinLatitude = lat - 0.0020F, MaxLatitude = lat + 0.0020F, MinLongitude = lng - 0.002F, MaxLongitude = lng + 0.002F }))
+                        foreach (var location in ConnectionControl.SkpApiClient.GetLocationsForOperator(_container.OperatorId, new GetSkpLocations { MinLatitude = lat - 0.0030F, MaxLatitude = lat + 0.0030F, MinLongitude = lng - 0.003F, MaxLongitude = lng + 0.003F }))
                         {
                             Location loc = new Location();
 
@@ -2326,7 +2342,7 @@ namespace ConnectionService
                         }
 
 
-                        LogFile.WriteMessageToLogFile("{0}: Found {1} locations within search area.", this.Name, locations.Count);
+                        LogFile.WriteMessageToLogFile("{0} Found {1} locations within search area.", this.Name, locations.Count);
                     }
 
                     //double minDevLat = 90.0F;
@@ -2346,7 +2362,7 @@ namespace ConnectionService
 
                                 bestLocation = loc;
 
-                                LogFile.WriteMessageToLogFile("{0}: Found preferred location ({1}:{2}:{3})", this.Name, loc.LocationId, loc.Name, loc.MaterialName);
+                                LogFile.WriteMessageToLogFile("{0} Found preferred location ({1}:{2}:{3})", this.Name, loc.LocationId, loc.Name, loc.MaterialName);
                                 break;
                             }
                         }
@@ -2363,7 +2379,7 @@ namespace ConnectionService
 
                                     bestLocation = loc;
 
-                                    LogFile.WriteMessageToLogFile("{0}: Found preferred fraction on location ({1}:{2}:{3}:{4})", this.Name, loc.LocationId, loc.Name, loc.MaterialName,
+                                    LogFile.WriteMessageToLogFile("{0} Found preferred fraction on location ({1}:{2}:{3}:{4})", this.Name, loc.LocationId, loc.Name, loc.MaterialName,
                                         loc.PreferredFractionId);
 
                                     break;
@@ -2384,7 +2400,7 @@ namespace ConnectionService
 
                                 bestLocation = loc;
 
-                                LogFile.WriteMessageToLogFile("{0}: Found last location ({1}:{2}:{3})", this.Name, loc.LocationId, loc.Name, loc.MaterialName);
+                                LogFile.WriteMessageToLogFile("{0} Found last location ({1}:{2}:{3})", this.Name, loc.LocationId, loc.Name, loc.MaterialName);
                                 break;
                             }
                         }
@@ -2401,7 +2417,7 @@ namespace ConnectionService
 
                                     bestLocation = loc;
 
-                                    LogFile.WriteMessageToLogFile("{0}: Found last fraction on location ({1}:{2}:{3}:{4})", this.Name, loc.LocationId, loc.Name, loc.MaterialName,
+                                    LogFile.WriteMessageToLogFile("{0} Found last fraction on location ({1}:{2}:{3}:{4})", this.Name, loc.LocationId, loc.Name, loc.MaterialName,
                                         loc.PreferredFractionId);
 
                                     break;
@@ -2420,7 +2436,7 @@ namespace ConnectionService
                             double devLat = Math.Abs(lat - loc.Latitude);
                             double devLng = Math.Abs(lng - loc.Longitude);
 
-                            LogFile.WriteMessageToLogFile("{0}: Location: {1}, deviation is lat: {2}, long: {3}", this.Name, loc.LocationId, devLat, devLng);
+                            LogFile.WriteMessageToLogFile("{0} Location: {1}, deviation is lat: {2}, long: {3}", this.Name, loc.LocationId, devLat, devLng);
 
                             if (devLat < minDevLat && devLng < minDevLong)
                             {
@@ -2435,8 +2451,8 @@ namespace ConnectionService
                     {
                         this._location = bestLocation;
 
-                        LogFile.WriteMessageToLogFile("{0}: Selected Location: {1}, {2}", this.Name, bestLocation.LocationId, bestLocation.Name);
-                        LogFile.WriteMessageToLogFile("{0}: Nightlockstart: {1}, End: {2}, Duration: {3}", this.Name, bestLocation.NightLockStart, bestLocation.NightLockEnd, bestLocation.NightLockDuration);
+                        LogFile.WriteMessageToLogFile("{0} Selected Location: {1}, {2}", this.Name, bestLocation.LocationId, bestLocation.Name);
+                        LogFile.WriteMessageToLogFile("{0} Nightlockstart: {1}, End: {2}, Duration: {3}", this.Name, bestLocation.NightLockStart, bestLocation.NightLockEnd, bestLocation.NightLockDuration);
 
 //                        _location.MaterialName = GetMaterialName(_location.MaterialId, _container.OperatorLanguage);
 
@@ -2448,7 +2464,7 @@ namespace ConnectionService
                     }
                     else
                     {
-                        LogFile.WriteMessageToLogFile("{0}: No location found within specified area!", this.Name);
+                        LogFile.WriteMessageToLogFile("{0} No location found within specified area!", this.Name);
                         ConnectionControl.SkpApiClient.RemoveContainerFromAllLocations(_container.ContainerId);
 
                         if (_container.Is2DotZero)
@@ -2464,12 +2480,28 @@ namespace ConnectionService
 
                                 _location.IsLiftTiltEquipped = _container.IsLiftTiltEquipped;   // do no more take this settings from database because it is comming from system features
                                 _location.IsRetroKitEquipped = _container.IsRetroFit;  // do no more take this settings from database because it is comming from system features
+                                _location.PressPosition = _container.PressPosition;
 
                                 _location.MachineUtilization = loc.MachineUtilization;
-                                _location.PressPosition = loc.PressPosition;
                                 _location.PressStrokes = loc.PressStrokes;
 
                                 LogFile.WriteMessageToLogFile("{0}: Take data from 2.0 database: {1}, {2}, {3}, {4}, {5}, {6}, {7}", this.Name,
+                                    _location.PressStrokes, _location.PressPosition, _location.FullWarningLevel, _location.FullErrorLevel,
+                                    _location.MachineUtilization, _location.IsLiftTiltEquipped, _location.IsRetroKitEquipped);
+                            }
+                            else
+                            {
+                                _location.FullErrorLevel = 90;
+                                _location.FullWarningLevel = 75;
+
+                                _location.IsLiftTiltEquipped = _container.IsLiftTiltEquipped;
+                                _location.IsRetroKitEquipped = _container.IsRetroFit;
+                                _location.PressPosition = _container.PressPosition;
+
+                                _location.MachineUtilization = 100;
+                                _location.PressStrokes = 3;
+
+                                LogFile.WriteMessageToLogFile("{0}: Not found in 2.0 database take default settings: {1}, {2}, {3}, {4}, {5}, {6}, {7}", this.Name,
                                     _location.PressStrokes, _location.PressPosition, _location.FullWarningLevel, _location.FullErrorLevel,
                                     _location.MachineUtilization, _location.IsLiftTiltEquipped, _location.IsRetroKitEquipped);
                             }
@@ -2520,7 +2552,7 @@ namespace ConnectionService
 
 #endregion
 
-#region Thread routines
+        #region Thread routines
 
         /// <summary>
         /// SKP connection state machine
@@ -2556,16 +2588,30 @@ namespace ConnectionService
                                 }
                                 else if (GetContainerAndLocation(str))
                                 {
+                                    int? numberOfStartings = 0;
+                                    int? operationMinutes = 0;
+
                                     _bIdentified = true;
 
                                     LogFile.WriteMessageToLogFile("{0} Found entry for container: {1}, ContainerId: {2}, on Location: {3}, Material: {4}, MobileNumber: {5}, PressStrokes: {6}, PreFullLevel: {7}, FullLevel: {8}",
                                         this.Name, _container.IdentString, _container.ContainerId, _location.LocationId, _location.MaterialName,
                                         _container.MobileNumber, _location.PressStrokes, _location.FullWarningLevel, _location.FullErrorLevel);
 
-                                    string strCommand = String.Format("#CON={0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12},{13},{14},{15},{16},{17}", _destTime.ToString("ddMMyyyy"), _destTime.ToString("HHmmss"),
+                                    if (_container.IsConfigrationInvalid)
+                                    {
+                                        var hwInformation = ConnectionControl.SkpApiClient.GetContainerHardwareInformation(_container.ContainerId);
+
+                                        numberOfStartings = hwInformation.NumberOfStartings;
+                                        operationMinutes = hwInformation.OperatingMinutes;
+
+                                        LogFile.WriteMessageToLogFile("{0} Container configuration seems to be corrupted so take infos from database. OperationMinutes: {1}, NumStartings: {2}", this.Name,
+                                            operationMinutes, numberOfStartings);
+                                    }
+
+                                    string strCommand = String.Format("#CON={0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12},{13},{14},{15},{16},{17},{18},{19},", _destTime.ToString("ddMMyyyy"), _destTime.ToString("HHmmss"),
                                         _container.ContainerId, _container.OperatorId, _location.MaterialId, _container.MobileNumber, _location.PressStrokes, _location.PressPosition ? 1 : 0, _location.FullWarningLevel, _location.FullErrorLevel,
                                         _container.FirmwareVersion, _location.NightLockStart, _location.NightLockDuration, _container.ContainerTypeId, _location.MachineUtilization,
-                                        _location.IsLiftTiltEquipped ? 1 : 0, _location.IsRetroKitEquipped ? 1 : 0, _container.IsExternalStartEquipped ? 1: 0);
+                                        _location.IsLiftTiltEquipped ? 1 : 0, _location.IsRetroKitEquipped ? 1 : 0, _container.IsExternalStartEquipped ? 1: 0, operationMinutes, numberOfStartings);
 
                                     if (SendCommand(strCommand))
                                         state = _CLIENT_STATE.WAIT_CONFIG_ACK;
