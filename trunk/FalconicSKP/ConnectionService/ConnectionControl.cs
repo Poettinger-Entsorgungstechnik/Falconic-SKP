@@ -29,8 +29,12 @@ using System.Diagnostics;
 
 //   Version History:
 
+//  1.0.1.17         -       20.04.2019 
+//                          - On event code 2727, 2728,2729, 2730 and 4360 do no more call REST api 
+
 //  1.0.1.16         -       05.04.2019 
 //                          - Feature #731: Betriebsstundenthematik bei Modultausch oder Fehlerhaften Werten
+//                          - Corrected error with external start (Bedienung_Lichtschranke)
 
 //  1.0.1.15         -       18.03.2019 
 //                          - # 673: Raised search area from 0.002F to 0.003F.
@@ -1730,8 +1734,6 @@ namespace ConnectionService
 
                         LogFile.WriteMessageToLogFile("{0}: Stored Event: {1}, time: {2}", this.Name, code, date);
 
-                        statusMsgList.Add(new StatusMessageDto(code, date.ToUniversalTime(), _container.ActualFillingLevel, true));
-
                         string message = Controller.GetTranslation("Message", _container.OperatorLanguage);
                         message += ": ";
 
@@ -1770,6 +1772,28 @@ namespace ConnectionService
                         {
                             continue;
                         }
+                        else if (code == 2728) // Goto Standby failed 1
+                        {
+                            LogFile.WriteErrorToLogFile("Goto standby (1) failed!");
+                            continue;
+                        }
+                        else if (code == 2729) // Goto Standby failed 2
+                        {
+                            LogFile.WriteErrorToLogFile("Goto standby (2) failed!");
+                            continue;
+                        }
+                        else if (code == 2730) // Emptying fallback triggered
+                        {
+                            LogFile.WriteErrorToLogFile("Emptying fallback triggered!");
+                            continue;
+                        }
+                        else if (code == 4360) // NO_GSM_CONNECTION
+                        {
+//                            LogFile.WriteErrorToLogFile("Connect to network failed!");
+                            continue;
+                        }
+
+                        statusMsgList.Add(new StatusMessageDto(code, date.ToUniversalTime(), _container.ActualFillingLevel, true));
 
                         String smsMessage = "\nIdent Nr.: " + _container.IdentString + "\n";
                         smsMessage += message + "\n";
@@ -2201,7 +2225,7 @@ namespace ConnectionService
                         {
                             _container.IsLiftTiltEquipped = true;
                         }
-                        else if (feature.IndexOf("Bedienung_Lichtschrankensteuerung") != -1)
+                        else if (feature.IndexOf("Lichtschrankensteuerung") != -1)
                         {
                             _container.IsExternalStartEquipped = true;
                         }
@@ -2236,7 +2260,7 @@ namespace ConnectionService
                             {
                                 _container.IsLiftTiltEquipped = true;
                             }
-                            else if (feature.IndexOf("Bedienung_Lichtschrankensteuerung") != -1)
+                            else if (feature.IndexOf("Lichtschrankensteuerung") != -1)
                             {
                                 _container.IsExternalStartEquipped = true;
                             }
