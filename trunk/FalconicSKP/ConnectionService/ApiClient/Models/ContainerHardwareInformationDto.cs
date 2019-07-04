@@ -24,13 +24,18 @@ namespace Falconic.Skp.Api.Client.Models
         /// Initializes a new instance of the ContainerHardwareInformationDto
         /// class.
         /// </summary>
-        public ContainerHardwareInformationDto(int? operatingMinutes = default(int?), int? numberOfStartings = default(int?), int? gsmSignalStrength = default(int?), string dataConnection = default(string), string firmwareVersion = default(string))
+        /// <param name="firmwareType">Possible values include:
+        /// 'Presscontrol'</param>
+        public ContainerHardwareInformationDto(int? operatingMinutes = default(int?), int? numberOfStartings = default(int?), int? gsmSignalStrength = default(int?), string dataConnection = default(string), FirmwareType? firmwareType = default(FirmwareType?), string firmwareVersion = default(string), string targetFirmwareVersion = default(string), System.DateTime? targetFirmwareUpdateDate = default(System.DateTime?))
         {
             OperatingMinutes = operatingMinutes;
             NumberOfStartings = numberOfStartings;
             GsmSignalStrength = gsmSignalStrength;
             DataConnection = dataConnection;
+            FirmwareType = firmwareType;
             FirmwareVersion = firmwareVersion;
+            TargetFirmwareVersion = targetFirmwareVersion;
+            TargetFirmwareUpdateDate = targetFirmwareUpdateDate;
             CustomInit();
         }
 
@@ -60,9 +65,25 @@ namespace Falconic.Skp.Api.Client.Models
         public string DataConnection { get; set; }
 
         /// <summary>
+        /// Gets or sets possible values include: 'Presscontrol'
+        /// </summary>
+        [JsonProperty(PropertyName = "firmwareType")]
+        public FirmwareType? FirmwareType { get; set; }
+
+        /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "firmwareVersion")]
         public string FirmwareVersion { get; set; }
+
+        /// <summary>
+        /// </summary>
+        [JsonProperty(PropertyName = "targetFirmwareVersion")]
+        public string TargetFirmwareVersion { get; set; }
+
+        /// <summary>
+        /// </summary>
+        [JsonProperty(PropertyName = "targetFirmwareUpdateDate")]
+        public System.DateTime? TargetFirmwareUpdateDate { get; set; }
 
     }
 }

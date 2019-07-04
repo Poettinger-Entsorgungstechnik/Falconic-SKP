@@ -1616,6 +1616,7 @@ namespace ConnectionService
 
                                     StoreContainerHardwareInformation info = new StoreContainerHardwareInformation();
                                     info.FirmwareVersion = _container.ModemFirmwareVersion;
+                                    info.FirmwareType = FirmwareType.Presscontrol;
                                     info.GsmSignalStrength = _container.ModemSignalQuality;
                                     info.NumberOfStartings = numberOfStartings;
                                     info.OperatingMinutes = minutesOfOperation;
@@ -2614,6 +2615,7 @@ namespace ConnectionService
                                 {
                                     int? numberOfStartings = 0;
                                     int? operationMinutes = 0;
+                                    var hwInformation = ConnectionControl.SkpApiClient.GetContainerHardwareInformation(_container.ContainerId);
 
                                     _bIdentified = true;
 
@@ -2623,13 +2625,18 @@ namespace ConnectionService
 
                                     if (_container.IsConfigrationInvalid)
                                     {
-                                        var hwInformation = ConnectionControl.SkpApiClient.GetContainerHardwareInformation(_container.ContainerId);
 
                                         numberOfStartings = hwInformation.NumberOfStartings;
                                         operationMinutes = hwInformation.OperatingMinutes;
 
                                         LogFile.WriteMessageToLogFile("{0} Container configuration seems to be corrupted so take infos from database. OperationMinutes: {1}, NumStartings: {2}", this.Name,
                                             operationMinutes, numberOfStartings);
+                                    }
+
+                                    if (hwInformation.TargetFirmwareUpdateDate >= DateTime.UtcNow && hwInformation.TargetFirmwareVersion != _container.FirmwareVersion)
+                                    {
+                                        LogFile.WriteMessageToLogFile("{0} Time to update to version: {1}, actual: {2}", this.Name, hwInformation.TargetFirmwareVersion, hwInformation.FirmwareVersion);
+                                        _container.FirmwareVersion = hwInformation.TargetFirmwareVersion;
                                     }
 
                                     string strCommand = String.Format("#CON={0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12},{13},{14},{15},{16},{17},{18},{19},", _destTime.ToString("ddMMyyyy"), _destTime.ToString("HHmmss"),

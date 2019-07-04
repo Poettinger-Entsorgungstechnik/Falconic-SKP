@@ -24,12 +24,15 @@ namespace Falconic.Skp.Api.Client.Models
         /// Initializes a new instance of the StoreContainerHardwareInformation
         /// class.
         /// </summary>
-        public StoreContainerHardwareInformation(int? operatingMinutes = default(int?), int? numberOfStartings = default(int?), int? gsmSignalStrength = default(int?), string dataConnection = default(string), string firmwareVersion = default(string), System.DateTime? timestamp = default(System.DateTime?))
+        /// <param name="firmwareType">Possible values include:
+        /// 'Presscontrol'</param>
+        public StoreContainerHardwareInformation(int? operatingMinutes = default(int?), int? numberOfStartings = default(int?), int? gsmSignalStrength = default(int?), string dataConnection = default(string), FirmwareType? firmwareType = default(FirmwareType?), string firmwareVersion = default(string), System.DateTime? timestamp = default(System.DateTime?))
         {
             OperatingMinutes = operatingMinutes;
             NumberOfStartings = numberOfStartings;
             GsmSignalStrength = gsmSignalStrength;
             DataConnection = dataConnection;
+            FirmwareType = firmwareType;
             FirmwareVersion = firmwareVersion;
             Timestamp = timestamp;
             CustomInit();
@@ -59,6 +62,12 @@ namespace Falconic.Skp.Api.Client.Models
         /// </summary>
         [JsonProperty(PropertyName = "dataConnection")]
         public string DataConnection { get; set; }
+
+        /// <summary>
+        /// Gets or sets possible values include: 'Presscontrol'
+        /// </summary>
+        [JsonProperty(PropertyName = "firmwareType")]
+        public FirmwareType? FirmwareType { get; set; }
 
         /// <summary>
         /// </summary>

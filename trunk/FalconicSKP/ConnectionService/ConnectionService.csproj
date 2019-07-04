@@ -60,6 +60,7 @@
     <Compile Include="ApiClient\Models\ContactMethod.cs" />
     <Compile Include="ApiClient\Models\ContainerHardwareInformationDto.cs" />
     <Compile Include="ApiClient\Models\ContainerParamsDto.cs" />
+    <Compile Include="ApiClient\Models\FirmwareType.cs" />
     <Compile Include="ApiClient\Models\GetSkpLocations.cs" />
     <Compile Include="ApiClient\Models\LastCommunicationResult.cs" />
     <Compile Include="ApiClient\Models\OperatorParamsDto.cs" />
