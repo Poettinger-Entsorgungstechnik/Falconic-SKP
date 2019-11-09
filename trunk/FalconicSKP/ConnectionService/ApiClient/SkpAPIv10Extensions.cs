@@ -390,7 +390,7 @@ namespace Falconic.Skp.Api.Client
             /// </param>
             /// <param name='apiVersion'>
             /// </param>
-            public static IList<string> GetLocationLanguageCodes(this ISkpAPIv10 operations, int locationId, string apiVersion = default(string))
+            public static LocationLanguageCodesDto GetLocationLanguageCodes(this ISkpAPIv10 operations, int locationId, string apiVersion = default(string))
             {
                 return operations.GetLocationLanguageCodesAsync(locationId, apiVersion).GetAwaiter().GetResult();
             }
@@ -405,7 +405,7 @@ namespace Falconic.Skp.Api.Client
             /// <param name='cancellationToken'>
             /// The cancellation token.
             /// </param>
-            public static async Task<IList<string>> GetLocationLanguageCodesAsync(this ISkpAPIv10 operations, int locationId, string apiVersion = default(string), CancellationToken cancellationToken = default(CancellationToken))
+            public static async Task<LocationLanguageCodesDto> GetLocationLanguageCodesAsync(this ISkpAPIv10 operations, int locationId, string apiVersion = default(string), CancellationToken cancellationToken = default(CancellationToken))
             {
                 using (var _result = await operations.GetLocationLanguageCodesWithHttpMessagesAsync(locationId, apiVersion, null, cancellationToken).ConfigureAwait(false))
                 {
@@ -533,6 +533,126 @@ namespace Falconic.Skp.Api.Client
             public static async Task<IList<SkpLocationDto>> GetLocationsForOperatorAsync(this ISkpAPIv10 operations, int operatorId, GetSkpLocations query = default(GetSkpLocations), string apiVersion = default(string), CancellationToken cancellationToken = default(CancellationToken))
             {
                 using (var _result = await operations.GetLocationsForOperatorWithHttpMessagesAsync(operatorId, query, apiVersion, null, cancellationToken).ConfigureAwait(false))
+                {
+                    return _result.Body;
+                }
+            }
+
+            /// <param name='operations'>
+            /// The operations group for this extension method.
+            /// </param>
+            /// <param name='query'>
+            /// </param>
+            /// <param name='apiVersion'>
+            /// </param>
+            public static CardAccessResult? HasCardAccessByCustomerNumber(this ISkpAPIv10 operations, HasCardAccessToLocationFractionByCustomerNumber query = default(HasCardAccessToLocationFractionByCustomerNumber), string apiVersion = default(string))
+            {
+                return operations.HasCardAccessByCustomerNumberAsync(query, apiVersion).GetAwaiter().GetResult();
+            }
+
+            /// <param name='operations'>
+            /// The operations group for this extension method.
+            /// </param>
+            /// <param name='query'>
+            /// </param>
+            /// <param name='apiVersion'>
+            /// </param>
+            /// <param name='cancellationToken'>
+            /// The cancellation token.
+            /// </param>
+            public static async Task<CardAccessResult?> HasCardAccessByCustomerNumberAsync(this ISkpAPIv10 operations, HasCardAccessToLocationFractionByCustomerNumber query = default(HasCardAccessToLocationFractionByCustomerNumber), string apiVersion = default(string), CancellationToken cancellationToken = default(CancellationToken))
+            {
+                using (var _result = await operations.HasCardAccessByCustomerNumberWithHttpMessagesAsync(query, apiVersion, null, cancellationToken).ConfigureAwait(false))
+                {
+                    return _result.Body;
+                }
+            }
+
+            /// <param name='operations'>
+            /// The operations group for this extension method.
+            /// </param>
+            /// <param name='query'>
+            /// </param>
+            /// <param name='apiVersion'>
+            /// </param>
+            public static CardAccessResult? HasCardAccessByCardUuid(this ISkpAPIv10 operations, HasCardAccessToLocationFractionByCardUuid query = default(HasCardAccessToLocationFractionByCardUuid), string apiVersion = default(string))
+            {
+                return operations.HasCardAccessByCardUuidAsync(query, apiVersion).GetAwaiter().GetResult();
+            }
+
+            /// <param name='operations'>
+            /// The operations group for this extension method.
+            /// </param>
+            /// <param name='query'>
+            /// </param>
+            /// <param name='apiVersion'>
+            /// </param>
+            /// <param name='cancellationToken'>
+            /// The cancellation token.
+            /// </param>
+            public static async Task<CardAccessResult?> HasCardAccessByCardUuidAsync(this ISkpAPIv10 operations, HasCardAccessToLocationFractionByCardUuid query = default(HasCardAccessToLocationFractionByCardUuid), string apiVersion = default(string), CancellationToken cancellationToken = default(CancellationToken))
+            {
+                using (var _result = await operations.HasCardAccessByCardUuidWithHttpMessagesAsync(query, apiVersion, null, cancellationToken).ConfigureAwait(false))
+                {
+                    return _result.Body;
+                }
+            }
+
+            /// <param name='operations'>
+            /// The operations group for this extension method.
+            /// </param>
+            /// <param name='command'>
+            /// </param>
+            /// <param name='apiVersion'>
+            /// </param>
+            public static CreateInsertionResult CreateInsertionByCustomerNumber(this ISkpAPIv10 operations, CreateInsertionTransactionByCustomerNumber command = default(CreateInsertionTransactionByCustomerNumber), string apiVersion = default(string))
+            {
+                return operations.CreateInsertionByCustomerNumberAsync(command, apiVersion).GetAwaiter().GetResult();
+            }
+
+            /// <param name='operations'>
+            /// The operations group for this extension method.
+            /// </param>
+            /// <param name='command'>
+            /// </param>
+            /// <param name='apiVersion'>
+            /// </param>
+            /// <param name='cancellationToken'>
+            /// The cancellation token.
+            /// </param>
+            public static async Task<CreateInsertionResult> CreateInsertionByCustomerNumberAsync(this ISkpAPIv10 operations, CreateInsertionTransactionByCustomerNumber command = default(CreateInsertionTransactionByCustomerNumber), string apiVersion = default(string), CancellationToken cancellationToken = default(CancellationToken))
+            {
+                using (var _result = await operations.CreateInsertionByCustomerNumberWithHttpMessagesAsync(command, apiVersion, null, cancellationToken).ConfigureAwait(false))
+                {
+                    return _result.Body;
+                }
+            }
+
+            /// <param name='operations'>
+            /// The operations group for this extension method.
+            /// </param>
+            /// <param name='command'>
+            /// </param>
+            /// <param name='apiVersion'>
+            /// </param>
+            public static CreateInsertionResult CreateInsertionByCardUuid(this ISkpAPIv10 operations, CreateInsertionTransactionByCardUuid command = default(CreateInsertionTransactionByCardUuid), string apiVersion = default(string))
+            {
+                return operations.CreateInsertionByCardUuidAsync(command, apiVersion).GetAwaiter().GetResult();
+            }
+
+            /// <param name='operations'>
+            /// The operations group for this extension method.
+            /// </param>
+            /// <param name='command'>
+            /// </param>
+            /// <param name='apiVersion'>
+            /// </param>
+            /// <param name='cancellationToken'>
+            /// The cancellation token.
+            /// </param>
+            public static async Task<CreateInsertionResult> CreateInsertionByCardUuidAsync(this ISkpAPIv10 operations, CreateInsertionTransactionByCardUuid command = default(CreateInsertionTransactionByCardUuid), string apiVersion = default(string), CancellationToken cancellationToken = default(CancellationToken))
+            {
+                using (var _result = await operations.CreateInsertionByCardUuidWithHttpMessagesAsync(command, apiVersion, null, cancellationToken).ConfigureAwait(false))
                 {
                     return _result.Body;
                 }

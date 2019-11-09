@@ -22,12 +22,13 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// Initializes a new instance of the StatusMessageDto class.
         /// </summary>
-        public StatusMessageDto(int code, System.DateTime timestamp, double? fillState = default(double?), bool? shouldNotifyUser = default(bool?))
+        public StatusMessageDto(int code, System.DateTime timestamp, bool shouldNotifyUser, bool includedInTransactions, double? fillState = default(double?))
         {
             Code = code;
             FillState = fillState;
             Timestamp = timestamp;
             ShouldNotifyUser = shouldNotifyUser;
+            IncludedInTransactions = includedInTransactions;
             CustomInit();
         }
 
@@ -54,7 +55,12 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "shouldNotifyUser")]
-        public bool? ShouldNotifyUser { get; set; }
+        public bool ShouldNotifyUser { get; set; }
+
+        /// <summary>
+        /// </summary>
+        [JsonProperty(PropertyName = "includedInTransactions")]
+        public bool IncludedInTransactions { get; set; }
 
         /// <summary>
         /// Validate the object.

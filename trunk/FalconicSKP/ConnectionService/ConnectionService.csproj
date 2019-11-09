@@ -57,12 +57,22 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="ApiClient\ISkpAPIv10.cs" />
+    <Compile Include="ApiClient\Models\BalanceMode.cs" />
+    <Compile Include="ApiClient\Models\CardAccessResult.cs" />
     <Compile Include="ApiClient\Models\ContactMethod.cs" />
     <Compile Include="ApiClient\Models\ContainerHardwareInformationDto.cs" />
     <Compile Include="ApiClient\Models\ContainerParamsDto.cs" />
+    <Compile Include="ApiClient\Models\CreateInsertionResult.cs" />
+    <Compile Include="ApiClient\Models\CreateInsertionTransaction.cs" />
+    <Compile Include="ApiClient\Models\CreateInsertionTransactionByCardUuid.cs" />
+    <Compile Include="ApiClient\Models\CreateInsertionTransactionByCustomerNumber.cs" />
     <Compile Include="ApiClient\Models\FirmwareType.cs" />
     <Compile Include="ApiClient\Models\GetSkpLocations.cs" />
+    <Compile Include="ApiClient\Models\HasCardAccessToLocationFraction.cs" />
+    <Compile Include="ApiClient\Models\HasCardAccessToLocationFractionByCardUuid.cs" />
+    <Compile Include="ApiClient\Models\HasCardAccessToLocationFractionByCustomerNumber.cs" />
     <Compile Include="ApiClient\Models\LastCommunicationResult.cs" />
+    <Compile Include="ApiClient\Models\LocationLanguageCodesDto.cs" />
     <Compile Include="ApiClient\Models\OperatorParamsDto.cs" />
     <Compile Include="ApiClient\Models\PreferredLocationFractionDto.cs" />
     <Compile Include="ApiClient\Models\SkpContainerFeaturesDto.cs" />
@@ -71,6 +81,7 @@
     <Compile Include="ApiClient\Models\StatusMessageDto.cs" />
     <Compile Include="ApiClient\Models\StoreContainerHardwareInformation.cs" />
     <Compile Include="ApiClient\Models\StoreContainerStatus.cs" />
+    <Compile Include="ApiClient\Models\TransactionOfflineMode.cs" />
     <Compile Include="ApiClient\Models\UpdateContainer.cs" />
     <Compile Include="ApiClient\Models\UpdateGeoPosition.cs" />
     <Compile Include="ApiClient\Models\UpdateLastCommunication.cs" />

@@ -22,7 +22,7 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// Initializes a new instance of the SkpLocationDto class.
         /// </summary>
-        public SkpLocationDto(int? locationId = default(int?), string name = default(string), string fractionName = default(string), System.Guid? fractionId = default(System.Guid?), double? latitude = default(double?), double? longitude = default(double?), bool? locationMonitoringActive = default(bool?), bool? nightLockActive = default(bool?), System.DateTime? nightLockStart = default(System.DateTime?), System.DateTime? nightLockStop = default(System.DateTime?), int? percentFullMessage = default(int?), int? percentPreFullMessage = default(int?), int? numberOfPresses = default(int?), bool? pressPosition = default(bool?), int? machineUtilization = default(int?))
+        public SkpLocationDto(int locationId, System.Guid fractionId, double latitude, double longitude, bool nightLockActive, System.DateTime nightLockStart, System.DateTime nightLockStop, int percentFullMessage, int percentPreFullMessage, int numberOfPresses, bool pressPosition, int machineUtilization, string name = default(string), string fractionName = default(string))
         {
             LocationId = locationId;
             Name = name;
@@ -30,7 +30,6 @@ namespace Falconic.Skp.Api.Client.Models
             FractionId = fractionId;
             Latitude = latitude;
             Longitude = longitude;
-            LocationMonitoringActive = locationMonitoringActive;
             NightLockActive = nightLockActive;
             NightLockStart = nightLockStart;
             NightLockStop = nightLockStop;
@@ -50,7 +49,7 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "locationId")]
-        public int? LocationId { get; set; }
+        public int LocationId { get; set; }
 
         /// <summary>
         /// </summary>
@@ -65,62 +64,67 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "fractionId")]
-        public System.Guid? FractionId { get; set; }
+        public System.Guid FractionId { get; set; }
 
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "latitude")]
-        public double? Latitude { get; set; }
+        public double Latitude { get; set; }
 
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "longitude")]
-        public double? Longitude { get; set; }
-
-        /// <summary>
-        /// </summary>
-        [JsonProperty(PropertyName = "locationMonitoringActive")]
-        public bool? LocationMonitoringActive { get; set; }
+        public double Longitude { get; set; }
 
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "nightLockActive")]
-        public bool? NightLockActive { get; set; }
+        public bool NightLockActive { get; set; }
 
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "nightLockStart")]
-        public System.DateTime? NightLockStart { get; set; }
+        public System.DateTime NightLockStart { get; set; }
 
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "nightLockStop")]
-        public System.DateTime? NightLockStop { get; set; }
+        public System.DateTime NightLockStop { get; set; }
 
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "percentFullMessage")]
-        public int? PercentFullMessage { get; set; }
+        public int PercentFullMessage { get; set; }
 
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "percentPreFullMessage")]
-        public int? PercentPreFullMessage { get; set; }
+        public int PercentPreFullMessage { get; set; }
 
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "numberOfPresses")]
-        public int? NumberOfPresses { get; set; }
+        public int NumberOfPresses { get; set; }
 
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "pressPosition")]
-        public bool? PressPosition { get; set; }
+        public bool PressPosition { get; set; }
 
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "machineUtilization")]
-        public int? MachineUtilization { get; set; }
+        public int MachineUtilization { get; set; }
 
+        /// <summary>
+        /// Validate the object.
+        /// </summary>
+        /// <exception cref="Microsoft.Rest.ValidationException">
+        /// Thrown if validation fails
+        /// </exception>
+        public virtual void Validate()
+        {
+            //Nothing to validate
+        }
     }
 }

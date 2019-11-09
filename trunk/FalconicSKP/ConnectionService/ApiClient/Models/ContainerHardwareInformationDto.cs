@@ -24,19 +24,23 @@ namespace Falconic.Skp.Api.Client.Models
         /// Initializes a new instance of the ContainerHardwareInformationDto
         /// class.
         /// </summary>
-        /// <param name="firmwareType">Possible values include:
-        /// 'Presscontrol'</param>
-        public ContainerHardwareInformationDto(int? operatingMinutes = default(int?), int? numberOfStartings = default(int?), int? gsmSignalStrength = default(int?), string dataConnection = default(string), FirmwareType? firmwareType = default(FirmwareType?), string firmwareVersion = default(string), string targetFirmwareVersion = default(string), System.DateTime? targetFirmwareUpdateDate = default(System.DateTime?))
+        public ContainerHardwareInformationDto(int operatingMinutes, int numberOfStartings, int gsmSignalStrength, string dataConnection = default(string), string firmwareVersion = default(string), string targetFirmwareVersion = default(string), System.DateTime? targetFirmwareUpdateDate = default(System.DateTime?))
         {
             OperatingMinutes = operatingMinutes;
             NumberOfStartings = numberOfStartings;
             GsmSignalStrength = gsmSignalStrength;
             DataConnection = dataConnection;
-            FirmwareType = firmwareType;
             FirmwareVersion = firmwareVersion;
             TargetFirmwareVersion = targetFirmwareVersion;
             TargetFirmwareUpdateDate = targetFirmwareUpdateDate;
             CustomInit();
+        }
+        /// <summary>
+        /// Static constructor for ContainerHardwareInformationDto class.
+        /// </summary>
+        static ContainerHardwareInformationDto()
+        {
+            FirmwareType = "Presscontrol";
         }
 
         /// <summary>
@@ -47,28 +51,22 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "operatingMinutes")]
-        public int? OperatingMinutes { get; set; }
+        public int OperatingMinutes { get; set; }
 
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "numberOfStartings")]
-        public int? NumberOfStartings { get; set; }
+        public int NumberOfStartings { get; set; }
 
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "gsmSignalStrength")]
-        public int? GsmSignalStrength { get; set; }
+        public int GsmSignalStrength { get; set; }
 
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "dataConnection")]
         public string DataConnection { get; set; }
-
-        /// <summary>
-        /// Gets or sets possible values include: 'Presscontrol'
-        /// </summary>
-        [JsonProperty(PropertyName = "firmwareType")]
-        public FirmwareType? FirmwareType { get; set; }
 
         /// <summary>
         /// </summary>
@@ -85,5 +83,20 @@ namespace Falconic.Skp.Api.Client.Models
         [JsonProperty(PropertyName = "targetFirmwareUpdateDate")]
         public System.DateTime? TargetFirmwareUpdateDate { get; set; }
 
+        /// <summary>
+        /// </summary>
+        [JsonProperty(PropertyName = "firmwareType")]
+        public static string FirmwareType { get; private set; }
+
+        /// <summary>
+        /// Validate the object.
+        /// </summary>
+        /// <exception cref="Microsoft.Rest.ValidationException">
+        /// Thrown if validation fails
+        /// </exception>
+        public virtual void Validate()
+        {
+            //Nothing to validate
+        }
     }
 }

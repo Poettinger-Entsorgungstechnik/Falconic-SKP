@@ -200,7 +200,7 @@ namespace Falconic.Skp.Api.Client
         /// <param name='cancellationToken'>
         /// The cancellation token.
         /// </param>
-        Task<HttpOperationResponse<IList<string>>> GetLocationLanguageCodesWithHttpMessagesAsync(int locationId, string apiVersion = default(string), Dictionary<string, List<string>> customHeaders = null, CancellationToken cancellationToken = default(CancellationToken));
+        Task<HttpOperationResponse<LocationLanguageCodesDto>> GetLocationLanguageCodesWithHttpMessagesAsync(int locationId, string apiVersion = default(string), Dictionary<string, List<string>> customHeaders = null, CancellationToken cancellationToken = default(CancellationToken));
 
         /// <param name='locationId'>
         /// </param>
@@ -253,6 +253,54 @@ namespace Falconic.Skp.Api.Client
         /// The cancellation token.
         /// </param>
         Task<HttpOperationResponse<IList<SkpLocationDto>>> GetLocationsForOperatorWithHttpMessagesAsync(int operatorId, GetSkpLocations query = default(GetSkpLocations), string apiVersion = default(string), Dictionary<string, List<string>> customHeaders = null, CancellationToken cancellationToken = default(CancellationToken));
+
+        /// <param name='query'>
+        /// </param>
+        /// <param name='apiVersion'>
+        /// </param>
+        /// <param name='customHeaders'>
+        /// The headers that will be added to request.
+        /// </param>
+        /// <param name='cancellationToken'>
+        /// The cancellation token.
+        /// </param>
+        Task<HttpOperationResponse<CardAccessResult?>> HasCardAccessByCustomerNumberWithHttpMessagesAsync(HasCardAccessToLocationFractionByCustomerNumber query = default(HasCardAccessToLocationFractionByCustomerNumber), string apiVersion = default(string), Dictionary<string, List<string>> customHeaders = null, CancellationToken cancellationToken = default(CancellationToken));
+
+        /// <param name='query'>
+        /// </param>
+        /// <param name='apiVersion'>
+        /// </param>
+        /// <param name='customHeaders'>
+        /// The headers that will be added to request.
+        /// </param>
+        /// <param name='cancellationToken'>
+        /// The cancellation token.
+        /// </param>
+        Task<HttpOperationResponse<CardAccessResult?>> HasCardAccessByCardUuidWithHttpMessagesAsync(HasCardAccessToLocationFractionByCardUuid query = default(HasCardAccessToLocationFractionByCardUuid), string apiVersion = default(string), Dictionary<string, List<string>> customHeaders = null, CancellationToken cancellationToken = default(CancellationToken));
+
+        /// <param name='command'>
+        /// </param>
+        /// <param name='apiVersion'>
+        /// </param>
+        /// <param name='customHeaders'>
+        /// The headers that will be added to request.
+        /// </param>
+        /// <param name='cancellationToken'>
+        /// The cancellation token.
+        /// </param>
+        Task<HttpOperationResponse<CreateInsertionResult>> CreateInsertionByCustomerNumberWithHttpMessagesAsync(CreateInsertionTransactionByCustomerNumber command = default(CreateInsertionTransactionByCustomerNumber), string apiVersion = default(string), Dictionary<string, List<string>> customHeaders = null, CancellationToken cancellationToken = default(CancellationToken));
+
+        /// <param name='command'>
+        /// </param>
+        /// <param name='apiVersion'>
+        /// </param>
+        /// <param name='customHeaders'>
+        /// The headers that will be added to request.
+        /// </param>
+        /// <param name='cancellationToken'>
+        /// The cancellation token.
+        /// </param>
+        Task<HttpOperationResponse<CreateInsertionResult>> CreateInsertionByCardUuidWithHttpMessagesAsync(CreateInsertionTransactionByCardUuid command = default(CreateInsertionTransactionByCardUuid), string apiVersion = default(string), Dictionary<string, List<string>> customHeaders = null, CancellationToken cancellationToken = default(CancellationToken));
 
         /// <param name='translationKey'>
         /// </param>

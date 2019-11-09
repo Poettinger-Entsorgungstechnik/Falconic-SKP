@@ -24,7 +24,7 @@ namespace Falconic.Skp.Api.Client.Models
         /// </summary>
         /// <param name="contactMethod">Possible values include: 'Email',
         /// 'Sms'</param>
-        public SkpNotificationContactDto(string contact = default(string), ContactMethod? contactMethod = default(ContactMethod?))
+        public SkpNotificationContactDto(ContactMethod contactMethod, string contact = default(string))
         {
             Contact = contact;
             ContactMethod = contactMethod;
@@ -45,7 +45,16 @@ namespace Falconic.Skp.Api.Client.Models
         /// Gets or sets possible values include: 'Email', 'Sms'
         /// </summary>
         [JsonProperty(PropertyName = "contactMethod")]
-        public ContactMethod? ContactMethod { get; set; }
+        public ContactMethod ContactMethod { get; set; }
 
+        /// <summary>
+        /// Validate the object.
+        /// </summary>
+        /// <exception cref="Microsoft.Rest.ValidationException">
+        /// Thrown if validation fails
+        /// </exception>
+        public virtual void Validate()
+        {
+        }
     }
 }

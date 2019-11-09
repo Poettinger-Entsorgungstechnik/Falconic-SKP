@@ -22,7 +22,7 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// Initializes a new instance of the ContainerParamsDto class.
         /// </summary>
-        public ContainerParamsDto(int? id = default(int?), int? operatorId = default(int?), string internalIdentNumber = default(string), string deviceNumber = default(string), string simCardNumber = default(string), string gsmNumber = default(string), string firmwareVersion = default(string), bool? retrofit = default(bool?), int? readPointer = default(int?), int? writePointer = default(int?), PreferredLocationFractionDto preferredLocation = default(PreferredLocationFractionDto), PreferredLocationFractionDto lastLocation = default(PreferredLocationFractionDto))
+        public ContainerParamsDto(int id, int readPointer, int writePointer, int? operatorId = default(int?), string internalIdentNumber = default(string), string deviceNumber = default(string), string simCardNumber = default(string), string gsmNumber = default(string), string firmwareVersion = default(string), bool? retrofit = default(bool?), PreferredLocationFractionDto preferredLocation = default(PreferredLocationFractionDto), PreferredLocationFractionDto lastLocation = default(PreferredLocationFractionDto))
         {
             Id = id;
             OperatorId = operatorId;
@@ -47,7 +47,7 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "id")]
-        public int? Id { get; set; }
+        public int Id { get; set; }
 
         /// <summary>
         /// </summary>
@@ -87,12 +87,12 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "readPointer")]
-        public int? ReadPointer { get; set; }
+        public int ReadPointer { get; set; }
 
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "writePointer")]
-        public int? WritePointer { get; set; }
+        public int WritePointer { get; set; }
 
         /// <summary>
         /// </summary>
@@ -104,5 +104,14 @@ namespace Falconic.Skp.Api.Client.Models
         [JsonProperty(PropertyName = "lastLocation")]
         public PreferredLocationFractionDto LastLocation { get; set; }
 
+        /// <summary>
+        /// Validate the object.
+        /// </summary>
+        /// <exception cref="Microsoft.Rest.ValidationException">
+        /// Thrown if validation fails
+        /// </exception>
+        public virtual void Validate()
+        {
+        }
     }
 }

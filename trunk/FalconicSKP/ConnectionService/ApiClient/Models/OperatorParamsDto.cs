@@ -22,13 +22,19 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// Initializes a new instance of the OperatorParamsDto class.
         /// </summary>
-        public OperatorParamsDto(int? operatorId = default(int?), string operatorName = default(string), System.Guid? currencyId = default(System.Guid?), string languageCode = default(string), string timezoneId = default(string))
+        /// <param name="transactionOfflineMode">Possible values include:
+        /// 'Allow', 'Forbid'</param>
+        /// <param name="balanceMode">Possible values include: 'OnlineBalance',
+        /// 'OfflineBalance'</param>
+        public OperatorParamsDto(int operatorId, int currencyId, TransactionOfflineMode transactionOfflineMode, BalanceMode balanceMode, string operatorName = default(string), string languageCode = default(string), string timezoneId = default(string))
         {
             OperatorId = operatorId;
             OperatorName = operatorName;
             CurrencyId = currencyId;
             LanguageCode = languageCode;
             TimezoneId = timezoneId;
+            TransactionOfflineMode = transactionOfflineMode;
+            BalanceMode = balanceMode;
             CustomInit();
         }
 
@@ -40,7 +46,7 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "operatorId")]
-        public int? OperatorId { get; set; }
+        public int OperatorId { get; set; }
 
         /// <summary>
         /// </summary>
@@ -50,7 +56,7 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "currencyId")]
-        public System.Guid? CurrencyId { get; set; }
+        public int CurrencyId { get; set; }
 
         /// <summary>
         /// </summary>
@@ -62,5 +68,27 @@ namespace Falconic.Skp.Api.Client.Models
         [JsonProperty(PropertyName = "timezoneId")]
         public string TimezoneId { get; set; }
 
+        /// <summary>
+        /// Gets or sets possible values include: 'Allow', 'Forbid'
+        /// </summary>
+        [JsonProperty(PropertyName = "transactionOfflineMode")]
+        public TransactionOfflineMode TransactionOfflineMode { get; set; }
+
+        /// <summary>
+        /// Gets or sets possible values include: 'OnlineBalance',
+        /// 'OfflineBalance'
+        /// </summary>
+        [JsonProperty(PropertyName = "balanceMode")]
+        public BalanceMode BalanceMode { get; set; }
+
+        /// <summary>
+        /// Validate the object.
+        /// </summary>
+        /// <exception cref="Microsoft.Rest.ValidationException">
+        /// Thrown if validation fails
+        /// </exception>
+        public virtual void Validate()
+        {
+        }
     }
 }

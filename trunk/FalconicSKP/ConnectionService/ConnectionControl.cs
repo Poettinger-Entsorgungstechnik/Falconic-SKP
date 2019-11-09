@@ -1616,7 +1616,7 @@ namespace ConnectionService
 
                                     StoreContainerHardwareInformation info = new StoreContainerHardwareInformation();
                                     info.FirmwareVersion = _container.ModemFirmwareVersion;
-                                    info.FirmwareType = FirmwareType.Presscontrol;
+//                                    info.FirmwareType = FirmwareType.Presscontrol;
                                     info.GsmSignalStrength = _container.ModemSignalQuality;
                                     info.NumberOfStartings = numberOfStartings;
                                     info.OperatingMinutes = minutesOfOperation;
@@ -1794,7 +1794,10 @@ namespace ConnectionService
                             continue;
                         }
 
-                        statusMsgList.Add(new StatusMessageDto(code, date.ToUniversalTime(), _container.ActualFillingLevel, true));
+                        bool bIncludedInTransaction = false;
+                        bool bShouldNotfiyUser = true;
+
+                        statusMsgList.Add(new StatusMessageDto(code, date.ToUniversalTime(), bShouldNotfiyUser, bIncludedInTransaction, _container.ActualFillingLevel));
 
                         String smsMessage = "\nIdent Nr.: " + _container.IdentString + "\n";
                         smsMessage += message + "\n";
@@ -1852,7 +1855,10 @@ namespace ConnectionService
 
                         LogFile.WriteMessageToLogFile("Event with type: {0} and time: {1}", type, time);
 
-                        statusMsgList.Add(new StatusMessageDto(code, date.ToUniversalTime(), _container.ActualFillingLevel, true));
+                        bool bIncludedInTransaction = false;
+                        bool bShouldNotfiyUser = true;
+
+                        statusMsgList.Add(new StatusMessageDto(code, date.ToUniversalTime(), bIncludedInTransaction, bShouldNotfiyUser, _container.ActualFillingLevel));
 
                         string message = Controller.GetTranslation("Message", _container.OperatorLanguage);
                         message += ": ";
@@ -2334,7 +2340,7 @@ namespace ConnectionService
 
                             loc.Latitude = (double)location.Latitude;
                             loc.Longitude = (double)location.Longitude;
-                            loc.IsWatchdogActive = (bool)location.LocationMonitoringActive;
+//                            loc.IsWatchdogActive = (bool)location.LocationMonitoringActive;
                             loc.PressStrokes = (int)location.NumberOfPresses;
                             loc.PressPosition = (bool)location.PressPosition;
                             loc.MachineUtilization = (int)location.MachineUtilization;
@@ -2342,7 +2348,7 @@ namespace ConnectionService
                             loc.FullWarningLevel = (int)location.PercentPreFullMessage;
                             loc.PreferredFractionId = location.FractionId;
 
-                            if (location.NightLockStart.HasValue && location.NightLockStop.HasValue)
+                            if (location.NightLockActive)
                             {
                                 DateTime nlStart = (DateTime)location.NightLockStart;
                                 DateTime nlStop = (DateTime)location.NightLockStop;
