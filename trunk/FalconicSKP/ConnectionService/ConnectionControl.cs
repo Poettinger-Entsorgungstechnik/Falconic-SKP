@@ -875,6 +875,7 @@ namespace ConnectionService
         private bool _bIsRetroFit;
         private bool _bIsLiftTiltEquipped;
         private bool _bIsExternalStartEquipped;
+        private bool _bIsIdentSystemEquipped;
         private bool _bIs2DotZero;
         private bool _pressPosition;                // position where press should stop 0 ... back, 1 ... front 
 
@@ -924,6 +925,7 @@ namespace ConnectionService
         public bool IsRetroFit { get => _bIsRetroFit; set => _bIsRetroFit = value; }
         public bool IsLiftTiltEquipped { get => _bIsLiftTiltEquipped; set => _bIsLiftTiltEquipped = value; }
         public bool IsExternalStartEquipped { get => _bIsExternalStartEquipped; set => _bIsExternalStartEquipped = value; }
+        public bool IsIdentSystemEquipped { get => _bIsIdentSystemEquipped; set => _bIsIdentSystemEquipped = value; }
         public bool PressPosition { get => _pressPosition; set => _pressPosition = value; }
         public bool Is2DotZero { get => _bIs2DotZero; set => _bIs2DotZero = value; }
         public bool IsConfigrationInvalid { get => _configrationInvalid; set => _configrationInvalid = value; }
@@ -2271,6 +2273,10 @@ namespace ConnectionService
                             {
                                 _container.IsExternalStartEquipped = true;
                             }
+                            else if (feature.IndexOf("Start mit Identsystem") != -1)
+                            {
+                                _container.IsIdentSystemEquipped = true;
+                            }
                             else if (feature.IndexOf("Druckeinst.") != -1)
                             {
                                 if (feature.IndexOf("hohe Dichte") != -1)
@@ -2645,10 +2651,10 @@ namespace ConnectionService
                                         _container.FirmwareVersion = hwInformation.TargetFirmwareVersion;
                                     }
 
-                                    string strCommand = String.Format("#CON={0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12},{13},{14},{15},{16},{17},{18},{19},", _destTime.ToString("ddMMyyyy"), _destTime.ToString("HHmmss"),
+                                    string strCommand = String.Format("#CON={0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12},{13},{14},{15},{16},{17},{18},{19},{20},", _destTime.ToString("ddMMyyyy"), _destTime.ToString("HHmmss"),
                                         _container.ContainerId, _container.OperatorId, _location.MaterialId, _container.MobileNumber, _location.PressStrokes, _location.PressPosition ? 1 : 0, _location.FullWarningLevel, _location.FullErrorLevel,
                                         _container.FirmwareVersion, _location.NightLockStart, _location.NightLockDuration, _container.ContainerTypeId, _location.MachineUtilization,
-                                        _location.IsLiftTiltEquipped ? 1 : 0, _location.IsRetroKitEquipped ? 1 : 0, _container.IsExternalStartEquipped ? 1: 0, operationMinutes, numberOfStartings);
+                                        _location.IsLiftTiltEquipped ? 1 : 0, _location.IsRetroKitEquipped ? 1 : 0, _container.IsExternalStartEquipped ? 1: 0, operationMinutes, numberOfStartings, _container.IsIdentSystemEquipped ? 1 : 0);
 
                                     if (SendCommand(strCommand))
                                         state = _CLIENT_STATE.WAIT_CONFIG_ACK;
