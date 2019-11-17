@@ -6,7 +6,6 @@
 
 namespace Falconic.Skp.Api.Client.Models
 {
-    using Microsoft.Rest;
     using Newtonsoft.Json;
     using System.Linq;
 
@@ -25,7 +24,7 @@ namespace Falconic.Skp.Api.Client.Models
         /// Initializes a new instance of the
         /// HasCardAccessToLocationFractionByCustomerNumber class.
         /// </summary>
-        public HasCardAccessToLocationFractionByCustomerNumber(string customerNumber, int operatorId, int locationId)
+        public HasCardAccessToLocationFractionByCustomerNumber(int customerNumber, int operatorId, int locationId)
         {
             CustomerNumber = customerNumber;
             OperatorId = operatorId;
@@ -41,7 +40,7 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "customerNumber")]
-        public string CustomerNumber { get; set; }
+        public int CustomerNumber { get; set; }
 
         /// <summary>
         /// </summary>
@@ -56,26 +55,12 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// Validate the object.
         /// </summary>
-        /// <exception cref="ValidationException">
+        /// <exception cref="Microsoft.Rest.ValidationException">
         /// Thrown if validation fails
         /// </exception>
         public virtual void Validate()
         {
-            if (CustomerNumber == null)
-            {
-                throw new ValidationException(ValidationRules.CannotBeNull, "CustomerNumber");
-            }
-            if (CustomerNumber != null)
-            {
-                if (CustomerNumber.Length > 255)
-                {
-                    throw new ValidationException(ValidationRules.MaxLength, "CustomerNumber", 255);
-                }
-                if (CustomerNumber.Length < 0)
-                {
-                    throw new ValidationException(ValidationRules.MinLength, "CustomerNumber", 0);
-                }
-            }
+            //Nothing to validate
         }
     }
 }

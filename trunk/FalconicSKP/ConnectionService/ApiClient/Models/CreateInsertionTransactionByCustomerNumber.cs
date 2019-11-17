@@ -25,7 +25,7 @@ namespace Falconic.Skp.Api.Client.Models
         /// Initializes a new instance of the
         /// CreateInsertionTransactionByCustomerNumber class.
         /// </summary>
-        public CreateInsertionTransactionByCustomerNumber(string customerNumber, System.DateTime timestamp, int operatorId, int containerId, int locationId, int statusMessageCode, double weightInKilo, int durationInSeconds, string cardUuid = default(string), string alibiStorageNumber = default(string), double? currentBalance = default(double?), double? newCurrentBalance = default(double?), double? chargedAmount = default(double?))
+        public CreateInsertionTransactionByCustomerNumber(int customerNumber, System.DateTime timestamp, int operatorId, int containerId, int locationId, int statusMessageCode, double weightInKilo, int durationInSeconds, string cardUuid = default(string), string alibiStorageNumber = default(string), double? currentBalance = default(double?), double? newCurrentBalance = default(double?), double? chargedAmount = default(double?))
         {
             CustomerNumber = customerNumber;
             CardUuid = cardUuid;
@@ -51,7 +51,7 @@ namespace Falconic.Skp.Api.Client.Models
         /// <summary>
         /// </summary>
         [JsonProperty(PropertyName = "customerNumber")]
-        public string CustomerNumber { get; set; }
+        public int CustomerNumber { get; set; }
 
         /// <summary>
         /// </summary>
@@ -121,21 +121,6 @@ namespace Falconic.Skp.Api.Client.Models
         /// </exception>
         public virtual void Validate()
         {
-            if (CustomerNumber == null)
-            {
-                throw new ValidationException(ValidationRules.CannotBeNull, "CustomerNumber");
-            }
-            if (CustomerNumber != null)
-            {
-                if (CustomerNumber.Length > 255)
-                {
-                    throw new ValidationException(ValidationRules.MaxLength, "CustomerNumber", 255);
-                }
-                if (CustomerNumber.Length < 0)
-                {
-                    throw new ValidationException(ValidationRules.MinLength, "CustomerNumber", 0);
-                }
-            }
             if (CardUuid != null)
             {
                 if (CardUuid.Length > 255)

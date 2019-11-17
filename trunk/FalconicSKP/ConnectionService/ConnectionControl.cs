@@ -29,6 +29,10 @@ using System.Diagnostics;
 
 //   Version History:
 
+//  1.1.0.00         -       12.11.2019 
+
+//                           - Customer handling for machines with cardstart
+
 //  1.0.1.17         -       20.04.2019 
 //                          - On event code 2727, 2728,2729, 2730 and 4360 do no more call REST api 
 
@@ -852,6 +856,71 @@ namespace ConnectionService
 #endregion
     }
 
+    public enum eCARD_TYPE
+    {
+        NONE,
+        PREPAID,
+        INVOICE,
+    }
+
+    [Serializable]
+    public class CustomerAccessCard
+    {
+        #region members
+
+        private UInt32 _customerNumber;             // Legacy: can be zero. If zero cardserialnumber should be set
+        private UInt32 _releaseNumber;              // Legacy: card release number?? not sure about this
+        private UInt32 _locationGroupMask;          // Legacy: for check 
+        private UInt32 _minimumAmount;              // Minimum amount [1/100] that should be on a prepaid card for successful access
+        private DateTime _releaseDate;              // Date at which card was handed out
+        private eCARD_TYPE _cardChargingType;       // 1 .. Prepaid, 2 .. Invoice
+        private UInt32 _positiveBalance;
+        private UInt32 _pricePerHundred;            // Price per hundred kilogramm [1/100]
+        private UInt32 _languageId;                 // language index
+        private DateTime _accessTime;               // Timepoint of machine access
+        private string _cardType;                   // Type of card 0041 HITAG, 0080 MyFare
+        private string _cardSerialNumber;           // hex formatted card serial number
+
+        #endregion
+
+        #region properties
+
+        public uint CustomerNumber { get => _customerNumber; set => _customerNumber = value; }
+        public uint ReleaseNumber { get => _releaseNumber; set => _releaseNumber = value; }
+        public uint LocationGroupMask { get => _locationGroupMask; set => _locationGroupMask = value; }
+        public uint MinimumAmount { get => _minimumAmount; set => _minimumAmount = value; }
+        public DateTime ReleaseDate { get => _releaseDate; set => _releaseDate = value; }
+        public eCARD_TYPE CardChargingType { get => _cardChargingType; set => _cardChargingType = value; }
+        public uint PositiveBalance { get => _positiveBalance; set => _positiveBalance = value; }
+        public uint PricePerHundred { get => _pricePerHundred; set => _pricePerHundred = value; }
+        public uint LanguageId { get => _languageId; set => _languageId = value; }
+        public DateTime AccessTime { get => _accessTime; set => _accessTime = value; }
+        public string CardType { get => _cardType; set => _cardType = value; }
+        public string CardSerialNumber { get => _cardSerialNumber; set => _cardSerialNumber = value; }
+
+        #endregion
+
+        #region constructor
+
+        public CustomerAccessCard()
+        {
+            _customerNumber = 0;
+            _releaseNumber = 0;
+            _locationGroupMask = 0;
+            _minimumAmount = 0;
+            _releaseDate = new DateTime(2000, 1, 1, 0, 0, 0);
+            _cardChargingType = eCARD_TYPE.NONE;
+            _positiveBalance = 0;
+            _pricePerHundred = 0;
+            _languageId = 0;
+            _accessTime = new DateTime(2000, 1, 1, 0, 0, 0);
+            _cardType = "0000";
+            _cardSerialNumber = "";
+        }
+
+        #endregion
+    }
+
     /// <summary>
     /// Class that represents a container object
     /// </summary>
@@ -1045,7 +1114,8 @@ namespace ConnectionService
             READ_JOURNAL,
             WAIT_READPOINTER_ACK,
             STOP,
-            ERROR
+            ONLINE,
+            ERROR,
         }
 
 #endregion
@@ -1086,6 +1156,12 @@ namespace ConnectionService
         _CLIENT_STATE state = _CLIENT_STATE.INIT;
         [NonSerialized]
         int _keepAliveInterval = 5;
+        [NonSerialized]
+        int _numberOfStartingsLastCycle = 0;
+        [NonSerialized]
+        int _signalQualityLastCycle = 0;
+        [NonSerialized]
+        string _cellInfoLastCycle = "";
 
 #endregion
 
@@ -1187,7 +1263,7 @@ namespace ConnectionService
 
 #endregion
 
-#region start & stop
+    #region start & stop
 
         public void Start()
         {
@@ -1529,6 +1605,7 @@ namespace ConnectionService
 
         private bool analyseStatus(string frame)
         {
+            
             try
             {
                 string[] toks = frame.Split(new char[] { '=', ',' });
@@ -1625,10 +1702,19 @@ namespace ConnectionService
                                     info.Timestamp = DateTime.Now;
                                     info.DataConnection = networkInfo;
 
-                                    LogFile.WriteMessageToLogFile("{0}: Store Hardwareinfo: {1}, {2}, {3}, {4}, {5}", this.Name, info.FirmwareVersion, info.GsmSignalStrength,
-                                        info.NumberOfStartings, info.OperatingMinutes, info.DataConnection);
+                                    if (_numberOfStartingsLastCycle != info.NumberOfStartings ||
+                                        _signalQualityLastCycle != info.GsmSignalStrength ||
+                                        _cellInfoLastCycle != networkInfo)
+                                    {
+                                        _numberOfStartingsLastCycle = info.NumberOfStartings;
+                                        _signalQualityLastCycle = info.GsmSignalStrength;
+                                        _cellInfoLastCycle = networkInfo;
 
-                                    ConnectionControl.SkpApiClient.StoreContainerHardwareInformationMethod(_container.ContainerId, info);
+                                        LogFile.WriteMessageToLogFile("{0}: Store Hardwareinfo: {1}, {2}, {3}, {4}, {5}", this.Name, info.FirmwareVersion, info.GsmSignalStrength,
+                                            info.NumberOfStartings, info.OperatingMinutes, info.DataConnection);
+
+                                        ConnectionControl.SkpApiClient.StoreContainerHardwareInformationMethod(_container.ContainerId, info);
+                                    }
                                 }
                                 catch (Exception excp)
                                 {
@@ -1677,6 +1763,21 @@ namespace ConnectionService
         {
             try
             {
+                // since firmware minor version 3 we got three additional fields: AlibiStorageNumber, CardType and CardSerialnumber in journal entries
+                UInt32 numFields = 11;
+                string[] fwParts = _container.ModemFirmwareVersion.Split(new char[] { '.' });
+                UInt32 minor;
+                try
+                {
+                     minor = Convert.ToUInt32(fwParts[1]);
+                    if (minor >= 3)
+                        numFields = 14;
+                }
+                catch (Exception)
+                {
+                    LogFile.WriteErrorToLogFile("{0} Invalid firmwarestring: {1}", this.Name, fwParts[1]);
+                }
+
                 // remove header
                 str = str.Substring(5);
                 // split in entries
@@ -1697,7 +1798,7 @@ namespace ConnectionService
                     {
                         string[] toks = str_entry[i].Split(new char[] { ',' });
 
-                        if (toks.GetLength(0) != 11)
+                        if (toks.GetLength(0) != numFields)
                         {
                             LogFile.WriteErrorToLogFile("{0} ParseJournalEntries, unexpected number of fields in entry: {1}!", this.Name, str_entry[i]);
                             return false;
@@ -1734,13 +1835,80 @@ namespace ConnectionService
                         int amount = Convert.ToInt32(toks[8]);
                         decimal positiveCreditBalance = Convert.ToDecimal(toks[9]) / 100;
                         int weight = Convert.ToInt32(toks[10]);
+                        String alibiStorageNumber = "";
+                        String cardType = "";
+                        String cardSerialNumber = "";
+
+                        if (numFields >= 13)
+                        {
+                            alibiStorageNumber = toks[11];
+                            cardType = toks[12];
+                            cardSerialNumber = toks[13].Trim();
+                        }
 
                         LogFile.WriteMessageToLogFile("{0}: Stored Event: {1}, time: {2}", this.Name, code, date);
 
                         string message = Controller.GetTranslation("Message", _container.OperatorLanguage);
                         message += ": ";
 
-                        if (code == 10)  // Emptying
+                        if (code == 1 || code == 4)
+                        {
+                            int cusNumber = 0;
+                            try
+                            {
+                                cusNumber = Convert.ToInt32(customerNumber);
+                            }
+                            catch (Exception) { };
+
+                            if (cusNumber == 0)
+                            {
+                                try
+                                {
+                                    CreateInsertionTransactionByCardUuid trans = new CreateInsertionTransactionByCardUuid();
+                                    trans.AlibiStorageNumber = alibiStorageNumber;
+                                    trans.CardUuid = cardType + ":" + cardSerialNumber;
+                                    trans.ContainerId = _container.ContainerId;
+                                    trans.DurationInSeconds = duration;
+                                    trans.LocationId = _location.LocationId;
+                                    trans.OperatorId = _container.OperatorId;
+                                    trans.StatusMessageCode = code;
+                                    trans.Timestamp = date.ToUniversalTime();
+                                    trans.WeightInKilo = 0;
+
+                                    LogFile.WriteMessageToLogFile("{0} Store transaction for customer: {1}, duration: {2}", this.Name, trans.CardUuid, trans.DurationInSeconds);
+                                    ConnectionControl.SkpApiClient.CreateInsertionByCardUuid(trans);
+                                }
+                                catch (Exception excp)
+                                {
+                                    LogFile.WriteErrorToLogFile("{0} Exception: {1} while trying to store transaction!", this.Name, excp.Message);
+                                }
+                            }
+                            else
+                            {
+                                try
+                                {
+                                    CreateInsertionTransactionByCustomerNumber trans = new CreateInsertionTransactionByCustomerNumber();
+                                    trans.CustomerNumber = cusNumber;
+                                    trans.AlibiStorageNumber = alibiStorageNumber;
+                                    trans.CardUuid = cardSerialNumber;
+                                    trans.ContainerId = _container.ContainerId;
+                                    trans.DurationInSeconds = duration;
+                                    trans.LocationId = _location.LocationId;
+                                    trans.OperatorId = _container.OperatorId;
+                                    trans.StatusMessageCode = code;
+                                    trans.Timestamp = date.ToUniversalTime();
+                                    trans.WeightInKilo = 0;
+
+                                    ConnectionControl.SkpApiClient.CreateInsertionByCustomerNumber(trans);
+                                }
+                                catch (Exception excp)
+                                {
+                                    LogFile.WriteErrorToLogFile("{0} Exception: {1} while trying to store transaction!", this.Name, excp.Message);
+                                }
+                            }
+                            continue;
+                        }
+                        else if (code == 10)  // Emptying
                         {
                             message += Controller.GetTranslation("Emptying", _container.OperatorLanguage);
                         }
@@ -1942,9 +2110,130 @@ namespace ConnectionService
             return false;
         }
 
+        private string TrimCustomerNumber(string custNumber)
+        {
+            for (int i = 0; i < custNumber.Length; i++)
+            {
+                if (custNumber[i] != '0')
+                {
+                    int remainder = custNumber.Length - i;
+                    if (remainder % 2 != 0)
+                    {
+                        remainder++;
+                        i--;
+                    }
+
+                    LogFile.WriteMessageToLogFile("{0} Trimmed customer number: {1}", this.Name, custNumber.Substring(i, remainder));
+                    return custNumber.Substring(i, remainder);
+                }
+            }
+
+            return "";
+        }
+
+        private bool ParseCustomerData(string str, ref CustomerAccessCard card)
+        {
+            try
+            {
+                string[] toks = str.Split(new char[] { '=', ',' });
+
+                if (toks.GetLength(0) >= 12)
+                {
+                    try
+                    {
+                        try { card.CustomerNumber = Convert.ToUInt32(toks[1]); } catch { };
+                        try { card.ReleaseNumber = Convert.ToUInt32(toks[2]); } catch { };
+                        try { card.LocationGroupMask = Convert.ToUInt32(toks[3]); } catch { };
+                        try { card.MinimumAmount = Convert.ToUInt32(toks[4]); } catch { };
+                        try { card.ReleaseDate = DateTime.ParseExact(toks[5], "ddMMyyyy", null); } catch { };
+                        try { card.CardChargingType = (eCARD_TYPE)Convert.ToUInt32(toks[6]); } catch { };
+                        try { card.PositiveBalance = Convert.ToUInt32(toks[7]); } catch { };
+                        try { card.PricePerHundred = Convert.ToUInt32(toks[8]); } catch { };
+                        try { card.LanguageId = Convert.ToUInt32(toks[9]); } catch { };
+
+                        try { card.AccessTime = DateTime.ParseExact(toks[10], "ddMMyyyy", null); }
+                        catch (Exception)
+                        {
+                            LogFile.WriteErrorToLogFile("{0} Invalid access date format in customer access string: {1}", this.Name, str);
+                        }
+
+                        try
+                        {
+                            DateTime actualTime = DateTime.ParseExact(toks[11], "HHmmss", null);
+                            card.AccessTime = card.AccessTime.Add(actualTime.TimeOfDay);
+                        }
+                        catch (Exception)
+                        {
+                            LogFile.WriteErrorToLogFile("{0} Invalid access time format in customer access string: {1}", this.Name, str);
+                        }
+
+                        if (toks.GetLength(0) >= 14)
+                        {
+                            try { card.CardType = toks[12]; } catch { };
+                            try { card.CardSerialNumber = toks[13]; } catch { };
+                            card.CardSerialNumber = TrimCustomerNumber(card.CardSerialNumber.Trim());
+                        }
+                    }
+                    catch (Exception excp)
+                    {
+                        LogFile.WriteErrorToLogFile("{0} Exception ({1}) while trying to parse customer data. ({2})", this.Name, excp.Message, str);
+                        return false;
+                    }
+                }
+                else
+                {
+                    LogFile.WriteErrorToLogFile("{0} customer access string. Invalid format: ({1})", this.Name, str);
+                    return false;
+                }
+            }
+            catch (Exception excp)
+            {
+                LogFile.WriteErrorToLogFile("{0} Exception ({1}) while trying to split customer data. ({2})", this.Name, excp.Message, str);
+                return false;
+            }
+
+            return true;
+        }
+
         private bool processFrame(string frame)
         {
             LogFile.WriteMessageToLogFile("{0} process frame: ({1})", Name, frame);
+
+            if (frame.StartsWith("%CUS"))
+            {
+                CustomerAccessCard card = new CustomerAccessCard();
+
+                if (ParseCustomerData(frame, ref card))
+                {
+                    CardAccessResult? access = CardAccessResult.CardNotFound;
+
+                    if (card.CustomerNumber != 0)
+                    {
+                        // check if customer access is allowed
+                        HasCardAccessToLocationFractionByCustomerNumber checkAccess = new HasCardAccessToLocationFractionByCustomerNumber((int)card.CustomerNumber, this._container.OperatorId, this._location.LocationId);
+                        access = ConnectionControl.SkpApiClient.HasCardAccessByCustomerNumber(checkAccess);
+                        LogFile.WriteMessageToLogFile($"Has Access {card.CustomerNumber}: {access}");
+                    }
+                    else
+                    {
+                        string uuid = card.CardType + ":" + card.CardSerialNumber;
+                        HasCardAccessToLocationFractionByCardUuid checkAccess = new HasCardAccessToLocationFractionByCardUuid(uuid, this._container.OperatorId, this._location.LocationId);
+                        access = ConnectionControl.SkpApiClient.HasCardAccessByCardUuid(checkAccess);
+                        LogFile.WriteMessageToLogFile($"Has Access {uuid}: {access}");
+                    }
+
+                    if (access == CardAccessResult.Ok)
+                    {
+                        SendCommand("#CUS!");
+                    }
+                    else
+                    {
+                        string answer = String.Format("#CUS: {0};", (int)access); 
+                        SendCommand(answer);
+                    }
+                }
+            }
+
 
             return true;
         }
@@ -2673,7 +2962,7 @@ namespace ConnectionService
                         case _CLIENT_STATE.WAIT_CONFIG_ACK:
                             if (_receivedFrames.Count > 0 && (str = getFrame("%STAT")) != "")
                             {
-                                LogFile.WriteMessageToLogFile("{0} Acknowledge configuration received", Name);
+//                                LogFile.WriteMessageToLogFile("{0} Acknowledge configuration received", Name);
 
                                 if (analyseStatus(str))
                                 {
@@ -2684,7 +2973,12 @@ namespace ConnectionService
                                             state = _CLIENT_STATE.START_READ_JOURNAL;
                                         }
                                         else
-                                            state = _CLIENT_STATE.STOP;
+                                        {
+                                            if (_container.IsIdentSystemEquipped)
+                                                state = _CLIENT_STATE.ONLINE;
+                                            else
+                                                state = _CLIENT_STATE.STOP;
+                                        }
                                     }
                                     else
                                     {
@@ -2712,7 +3006,12 @@ namespace ConnectionService
                                     state = _CLIENT_STATE.START_READ_JOURNAL;
                                 }
                                 else
-                                    state = _CLIENT_STATE.STOP;
+                                {
+                                    if (_container.IsIdentSystemEquipped)
+                                        state = _CLIENT_STATE.ONLINE;
+                                    else
+                                        state = _CLIENT_STATE.STOP;
+                                }
                             }
                             else if (DateTime.Now.Subtract(_tLastCommandToEco).TotalSeconds > 15)
                             {
@@ -2768,7 +3067,10 @@ namespace ConnectionService
 
                                 if (_container.WritePointer == _container.ReadPointer)
                                 {
-                                    state = _CLIENT_STATE.STOP;
+                                    if (_container.IsIdentSystemEquipped)
+                                        state = _CLIENT_STATE.ONLINE;
+                                    else
+                                        state = _CLIENT_STATE.STOP;
                                 }
                                 else
                                 {
@@ -2786,6 +3088,22 @@ namespace ConnectionService
                             ConnectionControl.SkpApiClient.UpdateContainerLastCommunication(_container.ContainerId, new UpdateLastCommunication(DateTime.Now));
                             LogFile.WriteMessageToLogFile("{0} Stop client -> up to date", Name);
                             Stop();
+                            break;
+
+                        case _CLIENT_STATE.ONLINE:
+                            if (_receivedFrames.Count > 0)
+                            {
+                                if ((str = getFrame("%EVT=")) != "")
+                                    ReadEvents(str);
+                            }
+                            else if (DateTime.Now > _tLastCommandToEco.AddMinutes(3))
+                            {
+                                // do every 3 minutes a status request
+                                // to get current read/write pointers
+                                // and to keep socket alive
+                                SendCommand("#STAT");
+                                state = _CLIENT_STATE.WAIT_CONFIG_ACK;
+                            }
                             break;
 
                         case _CLIENT_STATE.ERROR:
