@@ -2,18 +2,37 @@
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
+  </PropertyGroup>
+  <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{0B9A52B7-7AED-4FA9-80B9-05C13D6DEB5C}</ProjectGuid>
     <OutputType>WinExe</OutputType>
     <RootNamespace>ConnectionService</RootNamespace>
     <AssemblyName>ConnectionService</AssemblyName>
-    <TargetFrameworkVersion>v4.6.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <TargetFrameworkProfile />
     <NuGetPackageImportStamp>
     </NuGetPackageImportStamp>
+    <PublishUrl>publish\</PublishUrl>
+    <Install>true</Install>
+    <InstallFrom>Disk</InstallFrom>
+    <UpdateEnabled>false</UpdateEnabled>
+    <UpdateMode>Foreground</UpdateMode>
+    <UpdateInterval>7</UpdateInterval>
+    <UpdateIntervalUnits>Days</UpdateIntervalUnits>
+    <UpdatePeriodically>false</UpdatePeriodically>
+    <UpdateRequired>false</UpdateRequired>
+    <MapFileExtensions>true</MapFileExtensions>
+    <ApplicationRevision>0</ApplicationRevision>
+    <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
+    <IsWebBootstrapper>false</IsWebBootstrapper>
+    <UseApplicationTrust>false</UseApplicationTrust>
+    <BootstrapperEnabled>true</BootstrapperEnabled>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -35,6 +54,17 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Falconic.Messaging, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\..\..\Falconic\Softaware\SKP Client 2020-02-24\Falconic.Messaging\bin\Debug\netstandard2.0\Falconic.Messaging.dll</HintPath>
+    </Reference>
+    <Reference Include="Falconic.Skp.Api.Client, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\..\..\..\Falconic\Softaware\SKP Client 2020-02-24\Falconic.Skp.Api.Client\bin\Debug\netstandard2.0\Falconic.Skp.Api.Client.dll</HintPath>
+    </Reference>
+    <Reference Include="Mailjet.Client">
+      <HintPath>..\Mailjet.Client.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Configuration.Install" />
     <Reference Include="System.Core" />
@@ -56,39 +86,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="ApiClient\ISkpAPIv10.cs" />
-    <Compile Include="ApiClient\Models\BalanceMode.cs" />
-    <Compile Include="ApiClient\Models\CardAccessResult.cs" />
-    <Compile Include="ApiClient\Models\ContactMethod.cs" />
-    <Compile Include="ApiClient\Models\ContainerHardwareInformationDto.cs" />
-    <Compile Include="ApiClient\Models\ContainerParamsDto.cs" />
-    <Compile Include="ApiClient\Models\CreateInsertionResult.cs" />
-    <Compile Include="ApiClient\Models\CreateInsertionTransaction.cs" />
-    <Compile Include="ApiClient\Models\CreateInsertionTransactionByCardUuid.cs" />
-    <Compile Include="ApiClient\Models\CreateInsertionTransactionByCustomerNumber.cs" />
-    <Compile Include="ApiClient\Models\FirmwareType.cs" />
-    <Compile Include="ApiClient\Models\GetSkpLocations.cs" />
-    <Compile Include="ApiClient\Models\HasCardAccessToLocationFraction.cs" />
-    <Compile Include="ApiClient\Models\HasCardAccessToLocationFractionByCardUuid.cs" />
-    <Compile Include="ApiClient\Models\HasCardAccessToLocationFractionByCustomerNumber.cs" />
-    <Compile Include="ApiClient\Models\LastCommunicationResult.cs" />
-    <Compile Include="ApiClient\Models\LocationLanguageCodesDto.cs" />
-    <Compile Include="ApiClient\Models\OperatorParamsDto.cs" />
-    <Compile Include="ApiClient\Models\PreferredLocationFractionDto.cs" />
-    <Compile Include="ApiClient\Models\SkpContainerFeaturesDto.cs" />
-    <Compile Include="ApiClient\Models\SkpLocationDto.cs" />
-    <Compile Include="ApiClient\Models\SkpNotificationContactDto.cs" />
-    <Compile Include="ApiClient\Models\StatusMessageDto.cs" />
-    <Compile Include="ApiClient\Models\StoreContainerHardwareInformation.cs" />
-    <Compile Include="ApiClient\Models\StoreContainerStatus.cs" />
-    <Compile Include="ApiClient\Models\TransactionOfflineMode.cs" />
-    <Compile Include="ApiClient\Models\UpdateContainer.cs" />
-    <Compile Include="ApiClient\Models\UpdateGeoPosition.cs" />
-    <Compile Include="ApiClient\Models\UpdateLastCommunication.cs" />
-    <Compile Include="ApiClient\Models\UpdateReadWritePointer.cs" />
-    <Compile Include="ApiClient\SkpAPIv10.cs" />
-    <Compile Include="ApiClient\SkpAPIv10Extensions.cs" />
-    <Compile Include="ApiKeyDelegatingHandler.cs" />
+    <Compile Include="CCSDataAccess.cs" />
     <Compile Include="ConnectionControl.cs" />
     <Compile Include="ConnectionControlService.cs">
       <SubType>Component</SubType>
@@ -96,6 +94,7 @@
     <Compile Include="ConnectionControlService.Designer.cs">
       <DependentUpon>ConnectionControlService.cs</DependentUpon>
     </Compile>
+    <Compile Include="DataImportExport.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="ProjectInstaller.cs">
       <SubType>Component</SubType>
@@ -104,6 +103,10 @@
       <DependentUpon>ProjectInstaller.cs</DependentUpon>
     </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="ECOConnection.cs" />
+    <Compile Include="SMSClient.cs" />
+    <Compile Include="SKP.cs" />
+    <Compile Include="WIPDataAccess.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
@@ -112,12 +115,6 @@
     <EmbeddedResource Include="ProjectInstaller.resx">
       <DependentUpon>ProjectInstaller.cs</DependentUpon>
     </EmbeddedResource>
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="C:\Users\andre\OneDrive\Dokumente\Visual Studio 2017\Projects\Falconic\FalconicSKP\ConnectionService\Falconic.Messaging\Falconic.Messaging.csproj">
-      <Project>{74d28ea1-f2ca-4bde-8b5c-89749c6ba4c2}</Project>
-      <Name>Falconic.Messaging</Name>
-    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Azure.ServiceBus">
@@ -130,12 +127,29 @@
       <Version>2.3.17</Version>
     </PackageReference>
     <PackageReference Include="Newtonsoft.Json">
-      <Version>11.0.2</Version>
+      <Version>12.0.3</Version>
     </PackageReference>
+    <PackageReference Include="softaware.Authentication.Hmac.Client">
+      <Version>1.1.1</Version>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <BootstrapperPackage Include=".NETFramework,Version=v4.6.2">
+      <Visible>False</Visible>
+      <ProductName>Microsoft .NET Framework 4.6.2 %28x86 und x64%29</ProductName>
+      <Install>true</Install>
+    </BootstrapperPackage>
+    <BootstrapperPackage Include="Microsoft.Net.Framework.3.5.SP1">
+      <Visible>False</Visible>
+      <ProductName>.NET Framework 3.5 SP1</ProductName>
+      <Install>false</Install>
+    </BootstrapperPackage>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <PostBuildEvent>xcopy /Y "$(ProjectDir)$(OutDir)$(TargetName)$(TargetExt)" "c:\SKP\"
+xcopy /Y "$(ProjectDir)$(OutDir)Falconic.Messaging.dll" "c:\SKP\"
+xcopy /Y "$(ProjectDir)$(OutDir)Falconic.Skp.Api.Client.dll" "c:\SKP\"
 </PostBuildEvent>
   </PropertyGroup>
 </Project>

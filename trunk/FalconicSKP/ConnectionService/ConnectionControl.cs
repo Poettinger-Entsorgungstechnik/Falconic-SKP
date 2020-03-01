@@ -20,14 +20,41 @@ using System.Globalization;
 using System.Security.Cryptography;
 
 using Falconic.Skp.Api.Client;
-using Falconic.Skp.Api.Client.Models;
 using Falconic.Messaging.DTOs;
 using Falconic.Messaging.Exceptions;
 using Microsoft.Azure.ServiceBus;
 using Newtonsoft.Json;
 using System.Diagnostics;
+using Mailjet.Client;
+using Mailjet.Client.Resources;
+using System.Net.Http;
+using softaware.Authentication.Hmac.Client;
 
 //   Version History:
+
+//  1.2.0.05         -       01.03.2020
+
+//                   -       Eco Clients - New API for CreditBalance and LanguageId                    
+
+//  1.2.0.04         -       31.01.2020
+
+//                   -       Finished ECO Clients
+
+//  1.2.0.03         -       11.01.2020
+
+//                            Added SMS Remote Support
+
+//  1.2.0.02         -       07.12.2019
+
+//                          - Add ECO Clients
+
+//  1.2.0.01         -       30.11.2019
+
+//                          - Added SMS Boxes Types to send SMS messages out with these boxes      
+
+//  1.2.0.00         -       24.11.2019
+
+//                          - Merged WIP SKP to Project      
 
 //  1.1.0.00         -       12.11.2019 
 
@@ -86,13 +113,15 @@ namespace ConnectionService
 
         public static string ActualModemFirmwareVersion = "unknown";
 
-        public static ISkpAPIv10 SkpApiClient = null; // new SkpAPIv10(new Uri(_apiUrl), new ApiKeyDelegatingHandler(_apiId, _apiKey));
+        public static ISkpApiClient SkpApiClient = null; // new SkpAPIv10(new Uri(_apiUrl), new ApiKeyDelegatingHandler(_apiId, _apiKey));
 
         #endregion
 
         #region Members
 
         private ArrayList _clients = new ArrayList(100);	        // list of actual connected clients, allow 100 clients as default, can be increased
+        private ArrayList _ECOClients = new ArrayList(100);	        // list of actual connected clients, allow 100 clients as default, can be increased
+        private ArrayList _SMSClients = new ArrayList(100);	        // list of actual connected clients, allow 100 clients as default, can be increased
         private Mutex _emailMutex = new Mutex();
         private DateTime _tLastLocationCheck = DateTime.Now.Subtract(new TimeSpan(0,1,0,0,0));
         private Hashtable _lastMonitoringMessage = new Hashtable();
@@ -103,6 +132,15 @@ namespace ConnectionService
 
         private DateTime _lastTimeFsWatcherCalled;
         private Dictionary<string, Dictionary<string, string>> _lngDictionary = new Dictionary<string, Dictionary<string, string>>();
+        /// <summary>
+        /// WIP SKP service Methods can be removed after wip is merged to falconic
+        /// </summary>
+        private SKP.IWIPDataAccess _data_access = null;
+        private CCS.CCSDataAccess _data_access_ccs = null;
+        private ArrayList _WIPClients = new ArrayList(100);         // list of actual connected WIP clients, allow 100 clients as default, can be increased
+        /// <summary>
+        /// End WIP SKP service Methods
+        /// </summary>
 
         #endregion
 
@@ -201,6 +239,21 @@ namespace ConnectionService
             get { return _clients; }
         }
 
+        public ArrayList ConnectedWIPClients
+        {
+            get { return _WIPClients; }
+        }
+
+        public ArrayList ConnectedECOClients
+        {
+            get { return _ECOClients; }
+        }
+
+        public CCS.CCSDataAccess DataAccessCCS
+        {
+            get { return _data_access_ccs;  }
+        }
+
         #endregion
 
         #region Overrides
@@ -275,12 +328,15 @@ namespace ConnectionService
 
             try
             {
-                SkpApiClient = new SkpAPIv10(new Uri(_apiUrl), new ApiKeyDelegatingHandler(_apiId, _apiKey));
+                var httpClient = new HttpClient(new ApiKeyDelegatingHandler(_apiId, _apiKey, new HttpClientHandler()));
+                SkpApiClient = new SkpApiClient(_apiUrl, httpClient);
             }
             catch (Exception excp)
             {
                 LogFile.WriteErrorToLogFile("Exception: {0} while trying to establish connection to SkpAPIv10 on: {1}", excp.Message, _apiUrl);
             }
+
+            LogFile.WriteMessageToLogFile("{0} Start file system Watcher", this.ToString());
 
             // start file watcher for offline machines
             _fsWatcher.Path = "c:\\SKP\\2.0 Machines\\";
@@ -292,6 +348,52 @@ namespace ConnectionService
             _lastTimeFsWatcherCalled = DateTime.Now - new TimeSpan(0, 0, 10);
             // read file
             FsWatcher_Changed(this, new FileSystemEventArgs(WatcherChangeTypes.Changed, _fsWatcher.Path, "database.txt"));
+
+            /// <summary>
+            /// WIP SKP service Methods can be removed after wip is merged to falconic
+            /// </summary>
+            string WIP_ConnectionString = "Server=tcp:poettingerwip.database.windows.net,1433;Initial Catalog=WIP;Persist Security Info=False;User ID=wip;Password=9xWQyoatmZ3eH64ef5iS;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30";
+            string CCS_ConnectionString = "Server=tcp:poettingerwip.database.windows.net,1433;Initial Catalog=CCS;Persist Security Info=False;User ID=wip;Password=9xWQyoatmZ3eH64ef5iS;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30";
+
+            LogFile.WriteMessageToLogFile("{0} Start data access", this.ToString());
+
+            try
+            {
+                _data_access = new SKP.WIPLocalDataAccess(WIP_ConnectionString);
+            }
+            catch (Exception excp)
+            {
+                LogFile.WriteErrorToLogFile("Exception: {0} while trying to instantiate WIP data access!", excp.Message);
+            }
+
+            try
+            {
+                _data_access_ccs = new CCS.CCSDataAccess(CCS_ConnectionString);
+            }
+            catch (Exception excp)
+            {
+                LogFile.WriteErrorToLogFile("Exception: {0} while trying to instantiate WIP data access!", excp.Message);
+            }
+
+            LogFile.WriteMessageToLogFile("{0} Send Start Email", this.ToString());
+
+            try
+            {
+                ArrayList emailRecipients = new ArrayList();
+                AlertingUser user = new AlertingUser();
+                user.EmailAddress = "a.erler@weitblick-resources.at";
+                user.Name = "Andreas Erler";
+
+                emailRecipients.Add(user);
+
+                SendMail("Falconic Service Started", "Falconic", emailRecipients).Wait();
+            }
+            catch (Exception excp)
+            {
+                LogFile.WriteErrorToLogFile("{0} Exception ({1}) while trying to send email!", excp.Message);
+            }
+
+            LogFile.WriteMessageToLogFile("{0} Startup complete :-)", this.ToString());
         }
 
         private void FsWatcher_Changed(object sender, System.IO.FileSystemEventArgs e)
@@ -419,59 +521,59 @@ namespace ConnectionService
             return retval;
         }
 
-#endregion
+        #endregion
 
         #region static methods
 
-        //public static async Task SendMail(string message, string subject, ArrayList recipients)
-        //{
-        //    try
-        //    {
-        //        MailjetClient client = new MailjetClient("c0719838f86777631495b01e3d9fb47f", "83cfc1e5f8c84cb2a549f2e9c386c3fc");
-        //        JArray jRecepients = new JArray();
+        public static async Task SendMail(string message, string subject, ArrayList recipients)
+        {
+            try
+            {
+                MailjetClient client = new MailjetClient("c0719838f86777631495b01e3d9fb47f", "83cfc1e5f8c84cb2a549f2e9c386c3fc");
+                JArray jRecepients = new JArray();
 
-        //        for (int i = 0; i < recipients.Count; i++)
-        //        {
-        //            AlertingUser user = (AlertingUser)recipients[i];
+                for (int i = 0; i < recipients.Count; i++)
+                {
+                    AlertingUser user = (AlertingUser)recipients[i];
 
-        //            jRecepients.Add(new JObject { { "Email", user.EmailAddress } });
-        //        }
+                    jRecepients.Add(new JObject { { "Email", user.EmailAddress } });
+                }
 
-        //        MailjetRequest request = new MailjetRequest
-        //        {
-        //            Resource = Send.Resource,
-        //        }
-        //           //                   .Property(Send.FromEmail, "elch@aon.at")
-        //           .Property(Send.FromEmail, "falconic@poettinger.at")
-        //           .Property(Send.FromName, "FALCONIC")
-        //           .Property(Send.Subject, subject)
-        //           .Property(Send.TextPart, message)
-        //            //               .Property(Send.HtmlPart, "<h3>Dear passenger, welcome to Mailjet!</h3><br />May the delivery force be with you!")
-        //            //.Property(Send.Recipients, new JArray {
-        //            //    new JObject {
-        //            //        {"Email", "andreas.erler@ocilion.com"}
-        //            //        }
-        //            //    });
+                MailjetRequest request = new MailjetRequest
+                {
+                    Resource = Send.Resource,
+                }
+                   //                   .Property(Send.FromEmail, "elch@aon.at")
+                   .Property(Send.FromEmail, "falconic@poettinger.at")
+                   .Property(Send.FromName, "FALCONIC")
+                   .Property(Send.Subject, subject)
+                   .Property(Send.TextPart, message)
+                    //               .Property(Send.HtmlPart, "<h3>Dear passenger, welcome to Mailjet!</h3><br />May the delivery force be with you!")
+                    //.Property(Send.Recipients, new JArray {
+                    //    new JObject {
+                    //        {"Email", "andreas.erler@ocilion.com"}
+                    //        }
+                    //    });
 
-        //            .Property(Send.Recipients, jRecepients);
+                    .Property(Send.Recipients, jRecepients);
 
-        //        MailjetResponse response = await client.PostAsync(request);
-        //        if (response.IsSuccessStatusCode)
-        //        {
-        //            LogFile.WriteMessageToLogFile("Total: {0}, Count: {1}\n", response.GetTotal(), response.GetCount());
-        //        }
-        //        else
-        //        {
-        //            LogFile.WriteErrorToLogFile("StatusCode: {0}\n", response.StatusCode);
-        //            LogFile.WriteErrorToLogFile("ErrorInfo: {0}\n", response.GetErrorInfo());
-        //            LogFile.WriteErrorToLogFile("ErrorMessage: {0}\n", response.GetErrorMessage());
-        //        }
-        //    }
-        //    catch (Exception excp)
-        //    {
-        //        LogFile.WriteErrorToLogFile(excp.Message);
-        //    }
-        //}
+                MailjetResponse response = await client.PostAsync(request);
+                if (response.IsSuccessStatusCode)
+                {
+                    LogFile.WriteMessageToLogFile("Total: {0}, Count: {1}\n", response.GetTotal(), response.GetCount());
+                }
+                else
+                {
+                    LogFile.WriteErrorToLogFile("StatusCode: {0}\n", response.StatusCode);
+                    LogFile.WriteErrorToLogFile("ErrorInfo: {0}\n", response.GetErrorInfo());
+                    LogFile.WriteErrorToLogFile("ErrorMessage: {0}\n", response.GetErrorMessage());
+                }
+            }
+            catch (Exception excp)
+            {
+                LogFile.WriteErrorToLogFile(excp.Message);
+            }
+        }
 
         // since 10.08.2018 only SMS Messages are sent by us
         public static void DoAlerting(int containerId, int type, string smsMessage, string emailMessage, string subject)
@@ -489,7 +591,7 @@ namespace ConnectionService
                 alertUser.Name = "Unknown";
 
                 users.Add(alertUser);
-                LogFile.WriteMessageToLogFile("Send SMS for user: {0} to number: {1}", alertUser.Name, alertUser.TelephoneNumber);
+                LogFile.WriteMessageToLogFile("ContainerID {0}: Send SMS for user: {1} to number: {2}", containerId, alertUser.Name, alertUser.TelephoneNumber);
             }
 
             if (users.Count > 0)
@@ -500,35 +602,35 @@ namespace ConnectionService
                 FieldAreaNetwork.AlertingControl.AddAlarm("alarm.wallner-automation.com", users, "WIP", smsMessage, false, 0);
             }
         }
-        
-#endregion
-        
+
+        #endregion
+
         #region Methods
 
-        public void SendEmail(string subject, string body, string contact)
+        public void SendSMS(string text, string telnumber)
         {
-            MailMessage mail = new MailMessage("wip.container@poettinger.at", contact);
+            ArrayList users = new ArrayList();
 
-            mail.Subject = subject;
-            mail.Body = body;
+            FieldAreaNetwork.AlertingUser alertUser = new FieldAreaNetwork.AlertingUser();
+            alertUser.ClientName = "SKP";
+            alertUser.TelephoneNumber = telnumber;
+            alertUser.Flags = (int)ALERTING_FLAGS.SMS_ENABLED;
+            alertUser.EmailAddress = "";
+            alertUser.Name = "Unknown";
 
-            try
-            {
-                _emailMutex.WaitOne();
+            users.Add(alertUser);
+            LogFile.WriteMessageToLogFile("Send SMS for user: {0} to number: {1}", alertUser.Name, alertUser.TelephoneNumber);
+            if (text.Length > 160)
+                text = text.Substring(0, 160);
+            FieldAreaNetwork.AlertingControl.AddAlarm("alarm.wallner-automation.com", users, "WIP", text, false, 0);
+        }
 
-                SmtpClient smtp_client = new SmtpClient("10.10.1.1", 25);
-            
-                smtp_client.UseDefaultCredentials = true;
-                smtp_client.Send(mail);
-            }
-            catch (Exception excp)
-            {
-                LogFile.WriteErrorToLogFile("Exception: {0}, while sending email", excp.Message);
-            }
-            finally
-            {
-                _emailMutex.ReleaseMutex();
-            }
+        /// <summary>
+        /// WIP data access object
+        /// </summary>
+        public SKP.IWIPDataAccess DataAccess
+        {
+            get { return _data_access; }
         }
 
         /// <summary>
@@ -544,11 +646,65 @@ namespace ConnectionService
                     _clients.Remove(client);
                 }
 
-                LogFile.WriteMessageToLogFile("{0}: Remove Client. Clients left: {1}.", client.Name, _clients.Count);
+                LogFile.WriteMessageToLogFile("{0} Remove Client. Clients left: {1}.", client.Name, _clients.Count);
             }
             catch (Exception excp)
             {
                 LogFile.WriteErrorToLogFile("{0}: Error while removing client {1}\nException: {2}", this.GetType().ToString(),
+                    client.Name, excp.Message);
+            }
+        }
+
+        public void RemoveWIPClient(SKP.ClientConnection client)
+        {
+            try
+            {
+                lock (_WIPClients.SyncRoot)
+                {
+                    _WIPClients.Remove(client);
+                }
+
+                LogFile.WriteMessageToLogFile("{0} Remove WIP Client. WIP Clients left: {1}.", client.Name, _WIPClients.Count);
+            }
+            catch (Exception excp)
+            {
+                LogFile.WriteErrorToLogFile("{0}: Error while removing WIP client {1}\nException: {2}", this.GetType().ToString(),
+                    client.Name, excp.Message);
+            }
+        }
+
+        public void RemoveSMSClient(SMSClientConnection client)
+        {
+            try
+            {
+                lock (_SMSClients.SyncRoot)
+                {
+                    _SMSClients.Remove(client);
+                }
+
+                LogFile.WriteMessageToLogFile("{0} Remove SMS Client. SMS Clients left: {1}.", client.Name, _clients.Count);
+            }
+            catch (Exception excp)
+            {
+                LogFile.WriteErrorToLogFile("{0}: Error while removing SMS client {1}\nException: {2}", this.GetType().ToString(),
+                    client.Name, excp.Message);
+            }
+        }
+
+        public void RemoveECOClient(ECO.ClientConnection client)
+        {
+            try
+            {
+                lock (_ECOClients.SyncRoot)
+                {
+                    _ECOClients.Remove(client);
+                }
+
+                LogFile.WriteMessageToLogFile("{0} Remove ECO Client. ECO Clients left: {1}.", client.Name, _clients.Count);
+            }
+            catch (Exception excp)
+            {
+                LogFile.WriteErrorToLogFile("{0}: Error while removing ECO client {1}\nException: {2}", this.GetType().ToString(),
                     client.Name, excp.Message);
             }
         }
@@ -566,160 +722,6 @@ namespace ConnectionService
 
             return _lngDictionary[language][message];
         }
-
-#if false
-        private void LocationMonitoring()
-        {
-            TimeSpan ts = DateTime.Now.Subtract(_tLastLocationCheck);
-            List<Location> locations = new List<Location>();
-
-            if (ts.TotalMinutes >= 30)
-            {
-                _tLastLocationCheck = DateTime.Now;
-
-                string sqlStatement = "SELECT * FROM LOCATION WHERE MONITORING_ACTIVE=1";
-
-                LogFile.WriteMessageToLogFile("Monitoring: Start check ...");
-
-                try
-                {
-                    using (SqlConnection sqlConnection = new SqlConnection(DB_CONNECTION_STRING))
-                    {
-                        sqlConnection.Open();
-
-                        using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
-                        {
-                            using (SqlDataReader reader = cmd.ExecuteReader())
-                            {
-                                while (reader.Read())
-                                {
-                                    DateTime dtFrom = new DateTime();
-                                    DateTime dtTo = new DateTime();
-                                    TimeSpan tsSinceStart = DateTime.Today - new DateTime(1900, 1, 1);
-                                    int duration = 0;
-                                    int containerId = 0;
-                                    int locationId = 0;
-
-                                    if (reader["MONITOR_FROM"].GetType() != typeof(System.DBNull))
-                                    {
-                                        dtFrom = (DateTime)reader["MONITOR_FROM"];
-                                        dtFrom = dtFrom.Add(tsSinceStart);
-                                    }
-
-                                    if (reader["MONITOR_TO"].GetType() != typeof(System.DBNull))
-                                    {
-                                        dtTo = (DateTime)reader["MONITOR_TO"];
-                                        dtTo = dtTo.Add(tsSinceStart);
-                                    }
-
-                                    if (reader["MONITOR_DURATION"].GetType() != typeof(System.DBNull))
-                                    {
-                                        duration = (int)reader["MONITOR_DURATION"];
-                                    }
-
-                                    if (reader["CONTAINER_ID"].GetType() != typeof(System.DBNull))
-                                    {
-                                        containerId = (int)reader["CONTAINER_ID"];
-                                    }
-
-                                    if (reader["LOCATION_ID"].GetType() != typeof(System.DBNull))
-                                    {
-                                        locationId = (int)reader["LOCATION_ID"];
-                                    }
-
-                                    if (dtTo <= dtFrom)
-                                        dtTo = dtTo.AddDays(1);
-
-                                    if (DateTime.Now >= dtFrom && DateTime.Now < dtTo)
-                                    {
-                                        // store this loaction for monitoring
-                                        Location loc = new Location();
-
-                                        loc.LocationId = locationId;
-                                        loc.WatchdogDuration = duration;
-                                        loc.Name = (string)reader["LOCATION"];
-
-                                        LogFile.WriteMessageToLogFile("Monitoring: LocationId: {0}, ContainerId: {1}, From: {2}, To: {3}, Duration: {4}", locationId, containerId,
-                                            dtFrom, dtTo, duration);
-
-                                        locations.Add(loc);
-                                    }
-                                }
-
-                                reader.Close();
-                            }
-                        }
-
-                        foreach (Location loc in locations)
-                        {
-                            sqlStatement = "SELECT TRANSACTION_ID FROM TRANSACTIONS WHERE LOCATION_ID=@LocationId AND DATE > @Date";
-
-                            using (SqlCommand cmd = new SqlCommand(sqlStatement, sqlConnection))
-                            {
-                                SqlParameter locId = new SqlParameter("@LocationId", SqlDbType.Int);
-
-                                locId.Value = loc.LocationId;
-                                cmd.Parameters.Add(locId);
-
-                                DateTime dtMin = DateTime.Now.AddMinutes(-loc.WatchdogDuration);
-                                SqlParameter minDate = new SqlParameter("@Date", SqlDbType.DateTime);
-
-                                minDate.Value = dtMin;
-                                cmd.Parameters.Add(minDate);
-
-                                LogFile.WriteMessageToLogFile("Monitoring: Check LocationId: {0}, Starttime: {1}", loc.LocationId, dtMin);
-
-                                using (SqlDataReader reader = cmd.ExecuteReader())
-                                {
-                                    if (!reader.Read())
-                                    {
-                                        // there was no transactions in specified time
-                                        // so do alerting when necessary
-                                        bool bDoAlerting = true;
-
-                                        LogFile.WriteMessageToLogFile("Monitoring: LocationId: {0}, No Transactions found", loc.LocationId);
-
-                                        if (_lastMonitoringMessage[loc.LocationId] != null)
-                                        {
-                                            TimeSpan ts1 = DateTime.Now.Subtract((DateTime)_lastMonitoringMessage[loc.LocationId]);
-
-                                            if (ts1.TotalHours < 24)
-                                            {
-                                                LogFile.WriteMessageToLogFile("Monitoring: Skip alerting since time is not right");
-                                                bDoAlerting = false;
-                                            }
-                                        }
-
-                                        if (bDoAlerting) // && loc.LocationId == 708)
-                                        {
-                                            string smsMessage = String.Format("{0}: Warning: No Transactions since: {1} minutes", loc.Name, loc.WatchdogDuration);
-                                            string subject = "WIP - LocationMonitoring";
-
-                                            ConnectionControl.DoAlerting(loc.LocationId, 0, smsMessage, smsMessage, subject);
-                                            _lastMonitoringMessage[loc.LocationId] = DateTime.Now;
-                                        }
-                                    }
-                                    else
-                                    {
-                                        _lastMonitoringMessage[loc.LocationId] = null;
-                                    }
-                                }
-                            }
-                        }
-
-                        sqlConnection.Close();
-                    }
-                }
-                catch (Exception e)
-                {
-                    LogFile.WriteErrorToLogFile("{0} in \'LocationMonitoring\' appeared.", e.Message);
-                }
-
-                LogFile.WriteMessageToLogFile("Monitoring: End check ...");
-
-            }
-        }
-#endif
 
         /// <summary>
         /// Do the service's job
@@ -748,20 +750,129 @@ namespace ConnectionService
                         // check for new clients
                         if (tcpl.Pending())
                         {
-                            ClientConnection conn = new ClientConnection();
-                            conn.TcpClient = tcpl.AcceptTcpClient();
-                            conn.Controller = this;
-                            lock (_clients.SyncRoot)
+                            TcpClient tc = tcpl.AcceptTcpClient();
+                            Socket socket = tc.Client;
+                            socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true); // not sure but i think this does not work
+                            IPEndPoint ipEP = (IPEndPoint)socket.RemoteEndPoint;
+                            int length = 0;
+                            int offset = 0;
+                            byte[] frame = null;
+                            string firstLineReceived = "";
+
+                            for (int i = 0; i < 30; i++)
                             {
-                                _clients.Add(conn);
+                                if (socket.Poll(100000, SelectMode.SelectRead))
+                                {
+                                    if (socket.Available > 0)
+                                    {
+                                        if ((length = socket.Available) > 0)
+                                        {
+                                            byte[] bytes = new byte[length + offset];
+
+                                            if (offset > 0)
+                                                Array.Copy(frame, 0, bytes, 0, offset);
+
+                                            // get new bytes
+                                            socket.Receive(bytes, offset, length, SocketFlags.None);
+
+                                            frame = bytes;
+                                            offset += length;
+
+                                            if (offset >= 4)
+                                            {
+                                                short frame_length = (short)(frame[2] << 8 | frame[3] + 6);
+                                                // additionally we can do a comparision of checksums,
+                                                // but in this case a higher level is done already by the sockets layer
+                                                // so if last char is an ETX and the frame_length matches we consider a valid frame
+                                                if (offset == frame_length && frame[offset - 1] == 0x03)
+                                                {
+                                                    offset = 0;
+                                                    firstLineReceived = Encoding.ASCII.GetString(frame, 4, frame_length - 6);
+                                                    LogFile.WriteMessageToLogFile("{0} Received: {1}", this.GetType().ToString(), firstLineReceived);
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    else
+                                    {
+                                        LogFile.WriteMessageToLogFile("{0} Client connection has been closed remotely", this.GetType().ToString());
+                                        break;
+                                    }
+                                }
                             }
 
-                            Socket socket = conn.TcpClient.Client;
-                            IPEndPoint ipEP = (IPEndPoint)socket.RemoteEndPoint;
+                            // check for ECO-WIP clients
+                            if (firstLineReceived.IndexOf("ECO-") != -1 || firstLineReceived.IndexOf("SMS-Remote") != -1 || firstLineReceived.IndexOf("BWASTE-") != -1)
+                            {
+                                bool bIsInFalconic = false;
+                                string iccId = firstLineReceived.Substring(5);
+                                int posComma = iccId.IndexOf(',');
+                                if (posComma != -1)
+                                {
+                                    iccId = iccId.Substring(0, posComma);
+                                    LogFile.WriteMessageToLogFile("Try to get container parameters for IccId: {0}", iccId);
+                                    try
+                                    {
+                                        ContainerParamsDto contParams = (ContainerParamsDto)ConnectionControl.SkpApiClient.GetContainerParams(iccId);
+                                        bIsInFalconic = true;
+                                    }
+                                    catch (Exception excp)
+                                    {
+                                        LogFile.WriteErrorToLogFile("{0} Exception ({1}) while tring to ...", this.ToString(), excp.Message);
+                                        LogFile.WriteMessageToLogFile("{0}", excp.StackTrace);
+                                    }
+                                }
 
-                            LogFile.WriteMessageToLogFile("{0}: Client Nr: {1} with ip: {2} want to connect.", this.GetType().ToString(), _clients.Count, ipEP.Address.ToString());
-
-                            conn.Start();
+                                if (bIsInFalconic)
+                                {
+                                    ECO.ClientConnection conn = new ECO.ClientConnection(firstLineReceived);
+                                    conn.TcpClient = tc;
+                                    conn.Controller = this;
+                                    lock (_ECOClients.SyncRoot)
+                                    {
+                                        _ECOClients.Add(conn);
+                                    }
+                                    conn.Start();
+                                    LogFile.WriteMessageToLogFile("{0}: ECO (Falconic) Client Nr: {1} with ip {2} want to connect.", this.GetType().ToString(), _ECOClients.Count, ipEP.Address.ToString());
+                                }
+                                else
+                                {
+                                    SKP.ClientConnection conn = new SKP.ClientConnection(firstLineReceived);
+                                    conn.TcpClient = tc;
+                                    conn.Controller = this;
+                                    lock (_WIPClients.SyncRoot)
+                                    {
+                                        _WIPClients.Add(conn);
+                                    }
+                                    conn.Start();
+                                    LogFile.WriteMessageToLogFile("{0}: WIP Client Nr: {1} with ip: {2} want to connect.", this.GetType().ToString(), _WIPClients.Count, ipEP.Address.ToString());
+                                }
+                            }
+                            else if (firstLineReceived.IndexOf("SMS-Machine") != -1)
+                            {
+                                SMSClientConnection conn = new SMSClientConnection(firstLineReceived);
+                                conn.TcpClient = tc;
+                                conn.Controller = this;
+                                lock (_SMSClients.SyncRoot)
+                                {
+                                    _SMSClients.Add(conn);
+                                }
+                                conn.Start();
+                                LogFile.WriteMessageToLogFile("{0}: SMS Client Nr: {1} with ip: {2} want to connect.", this.GetType().ToString(), _SMSClients.Count, ipEP.Address.ToString());       
+                            }
+                            else
+                            {
+                                ClientConnection conn = new ClientConnection(firstLineReceived);
+                                conn.TcpClient = tc;
+                                conn.Controller = this;
+                                lock (_clients.SyncRoot)
+                                {
+                                    _clients.Add(conn);
+                                }
+                                conn.Start();
+                                LogFile.WriteMessageToLogFile("{0}: Client Nr: {1} with ip: {2} want to connect.", this.GetType().ToString(), _clients.Count, ipEP.Address.ToString());
+                            }
                         }
 
 //                        LocationMonitoring();
@@ -794,10 +905,22 @@ namespace ConnectionService
                 {
                     ((ClientConnection)x).Stop();
                 }
+
+                // stop all wip client threads
+                foreach (object x in _WIPClients)
+                {
+                    ((SKP.ClientConnection)x).Stop();
+                }
+
+                // stop all sms client threads
+                foreach (object x in _SMSClients)
+                {
+                    ((SMSClientConnection)x).Stop();
+                }
             }
         }
 
-#endregion
+        #endregion
     }
 
     [Serializable]
@@ -1257,8 +1380,10 @@ namespace ConnectionService
 
 #region constructor
 
-        public ClientConnection()
+        public ClientConnection(string firstFrame)
         {
+            if (firstFrame != "")
+                _receivedFrames.Enqueue(firstFrame);
         }
 
 #endregion
@@ -1610,8 +1735,6 @@ namespace ConnectionService
             {
                 string[] toks = frame.Split(new char[] { '=', ',' });
 
-                LogFile.WriteMessageToLogFile("Analyze status with string: {0}", frame);
-
                 if (toks.GetLength(0) > 4)
                 {
                     try
@@ -1679,10 +1802,18 @@ namespace ConnectionService
                                                 locationAreaCode = Convert.ToInt32(toks[16], 16);
                                                 cellId = Convert.ToInt32(toks[17], 16);
                                             }
+                                            else if (toks[9] == "4G")
+                                            {
+                                                signaldB = Convert.ToInt32(toks[21]);
+                                                mobileCountryCode = Convert.ToInt32(toks[15]);
+                                                mobileNetworkCode = Convert.ToInt32(toks[16]);
+                                                locationAreaCode = Convert.ToInt32(toks[17], 16);
+                                                cellId = Convert.ToInt32(toks[18], 16);
+                                            }
                                         }
                                         catch (Exception excp)
                                         {
-                                            LogFile.WriteMessageToLogFile("{0}: ({1}), while trying to get Networkinfo", this.Name, excp.Message);
+                                            LogFile.WriteMessageToLogFile("{0} ({1}), while trying to get Networkinfo", this.Name, excp.Message);
                                         }
                                     }
 
@@ -1693,14 +1824,8 @@ namespace ConnectionService
                                     networkInfo += " - CELLID: " + cellId;
 
 
-                                    StoreContainerHardwareInformation info = new StoreContainerHardwareInformation();
-                                    info.FirmwareVersion = _container.ModemFirmwareVersion;
-//                                    info.FirmwareType = FirmwareType.Presscontrol;
-                                    info.GsmSignalStrength = _container.ModemSignalQuality;
-                                    info.NumberOfStartings = numberOfStartings;
-                                    info.OperatingMinutes = minutesOfOperation;
-                                    info.Timestamp = DateTime.Now;
-                                    info.DataConnection = networkInfo;
+                                    StoreContainerHardwareInformation info = new StoreContainerHardwareInformation(networkInfo, FirmwareType.Presscontrol, _container.ModemFirmwareVersion, _container.ModemSignalQuality,
+                                        numberOfStartings, minutesOfOperation, DateTime.Now);
 
                                     if (_numberOfStartingsLastCycle != info.NumberOfStartings ||
                                         _signalQualityLastCycle != info.GsmSignalStrength ||
@@ -1710,15 +1835,15 @@ namespace ConnectionService
                                         _signalQualityLastCycle = info.GsmSignalStrength;
                                         _cellInfoLastCycle = networkInfo;
 
-                                        LogFile.WriteMessageToLogFile("{0}: Store Hardwareinfo: {1}, {2}, {3}, {4}, {5}", this.Name, info.FirmwareVersion, info.GsmSignalStrength,
+                                        LogFile.WriteMessageToLogFile("{0} Store Hardwareinfo: {1}, {2}, {3}, {4}, {5}", this.Name, info.FirmwareVersion, info.GsmSignalStrength,
                                             info.NumberOfStartings, info.OperatingMinutes, info.DataConnection);
 
-                                        ConnectionControl.SkpApiClient.StoreContainerHardwareInformationMethod(_container.ContainerId, info);
+                                        ConnectionControl.SkpApiClient.StoreContainerHardwareInformation(_container.ContainerId, info);
                                     }
                                 }
                                 catch (Exception excp)
                                 {
-                                    LogFile.WriteErrorToLogFile("{0}: Exception ({1}) while trying to parse network info", this.Name, excp.Message);
+                                    LogFile.WriteErrorToLogFile("{0} Exception ({1}) while trying to parse network info", this.Name, excp.Message);
                                 }
                             }
                         }
@@ -1846,10 +1971,20 @@ namespace ConnectionService
                             cardSerialNumber = toks[13].Trim();
                         }
 
-                        LogFile.WriteMessageToLogFile("{0}: Stored Event: {1}, time: {2}", this.Name, code, date);
+                        LogFile.WriteMessageToLogFile("{0} Stored Event: {1}, time: {2}", this.Name, code, date);
 
                         string message = Controller.GetTranslation("Message", _container.OperatorLanguage);
                         message += ": ";
+
+                        try
+                        {
+                            message += ConnectionControl.SkpApiClient.GetTranslationForStatusMessage(code, _container.OperatorLanguage);
+                            LogFile.WriteMessageToLogFile("{0} Got Translation for code: {1} -> {2}", this.Name, code, message);
+                        }
+                        catch (Exception excp)
+                        {
+                            LogFile.WriteErrorToLogFile("{0} Exception: {1} while trying to get translation for code: {2}, language code: {3}", this.Name, excp.Message, code, _container.OperatorLanguage);
+                        }
 
                         if (code == 1 || code == 4)
                         {
@@ -1864,16 +1999,13 @@ namespace ConnectionService
                             {
                                 try
                                 {
-                                    CreateInsertionTransactionByCardUuid trans = new CreateInsertionTransactionByCardUuid();
-                                    trans.AlibiStorageNumber = alibiStorageNumber;
-                                    trans.CardUuid = cardType + ":" + cardSerialNumber;
-                                    trans.ContainerId = _container.ContainerId;
-                                    trans.DurationInSeconds = duration;
-                                    trans.LocationId = _location.LocationId;
-                                    trans.OperatorId = _container.OperatorId;
-                                    trans.StatusMessageCode = code;
-                                    trans.Timestamp = date.ToUniversalTime();
-                                    trans.WeightInKilo = 0;
+                                    double chargedAmount = 0.0F;
+                                    double currentBalance = 0.0F;
+                                    double weightInKilo = 0.0F;
+
+                                    CreateInsertionTransactionByCardUuid trans = new CreateInsertionTransactionByCardUuid(alibiStorageNumber, cardSerialNumber, 
+                                        chargedAmount, _container.ContainerId, currentBalance, duration, _location.LocationId, null, _container.OperatorId,
+                                        code, date.ToUniversalTime(), weightInKilo);
 
                                     LogFile.WriteMessageToLogFile("{0} Store transaction for customer: {1}, duration: {2}", this.Name, trans.CardUuid, trans.DurationInSeconds);
                                     ConnectionControl.SkpApiClient.CreateInsertionByCardUuid(trans);
@@ -1887,17 +2019,13 @@ namespace ConnectionService
                             {
                                 try
                                 {
-                                    CreateInsertionTransactionByCustomerNumber trans = new CreateInsertionTransactionByCustomerNumber();
-                                    trans.CustomerNumber = cusNumber;
-                                    trans.AlibiStorageNumber = alibiStorageNumber;
-                                    trans.CardUuid = cardSerialNumber;
-                                    trans.ContainerId = _container.ContainerId;
-                                    trans.DurationInSeconds = duration;
-                                    trans.LocationId = _location.LocationId;
-                                    trans.OperatorId = _container.OperatorId;
-                                    trans.StatusMessageCode = code;
-                                    trans.Timestamp = date.ToUniversalTime();
-                                    trans.WeightInKilo = 0;
+                                    double chargedAmount = 0.0F;
+                                    double currentBalance = 0.0F;
+                                    double weightInKilo = 0.0F;
+
+                                    CreateInsertionTransactionByCustomerNumber trans = new CreateInsertionTransactionByCustomerNumber(alibiStorageNumber, cardSerialNumber,
+                                        chargedAmount, _container.ContainerId, currentBalance, cusNumber, duration, _location.LocationId, null, _container.OperatorId,
+                                        code, date.ToUniversalTime(), weightInKilo);
 
                                     ConnectionControl.SkpApiClient.CreateInsertionByCustomerNumber(trans);
                                 }
@@ -1908,36 +2036,10 @@ namespace ConnectionService
                             }
                             continue;
                         }
-                        else if (code == 10)  // Emptying
-                        {
-                            message += Controller.GetTranslation("Emptying", _container.OperatorLanguage);
-                        }
                         else if (code == 20)  // Power On Event
                         {
                             if (_container.OperatorId == 10008) // no power on messages to wong fong
                                 continue;
-
-                            message += Controller.GetTranslation("PowerOn", _container.OperatorLanguage);
-                        }
-                        else if (code == 40) // Nearly full Event
-                        {
-                            message += Controller.GetTranslation("PreFull", _container.OperatorLanguage);
-                        }
-                        else if (code == 41) // Full Event
-                        {
-                            message += Controller.GetTranslation("Full", _container.OperatorLanguage);
-                        }
-                        else if (code == 4025) // Emergency stop
-                        {
-                            message += Controller.GetTranslation("EmergencyStop", _container.OperatorLanguage);
-                        }
-                        else if (code == 4030) // Motorschutz
-                        {
-                            message += Controller.GetTranslation("MotorProtection", _container.OperatorLanguage);
-                        }
-                        else if (code == 4010) // Störung
-                        {
-                            message += Controller.GetTranslation("Malfunction", _container.OperatorLanguage);
                         }
                         else if (code == 2727) // Geodata changed
                         {
@@ -1960,14 +2062,14 @@ namespace ConnectionService
                         }
                         else if (code == 4360) // NO_GSM_CONNECTION
                         {
-//                            LogFile.WriteErrorToLogFile("Connect to network failed!");
                             continue;
                         }
 
                         bool bIncludedInTransaction = false;
                         bool bShouldNotfiyUser = true;
+                        bool bStoreInHistory = true;
 
-                        statusMsgList.Add(new StatusMessageDto(code, date.ToUniversalTime(), bShouldNotfiyUser, bIncludedInTransaction, _container.ActualFillingLevel));
+                        statusMsgList.Add(new StatusMessageDto(code, _container.ActualFillingLevel, bIncludedInTransaction, bShouldNotfiyUser, bStoreInHistory, date.ToUniversalTime()));
 
                         String smsMessage = "\nIdent Nr.: " + _container.IdentString + "\n";
                         smsMessage += message + "\n";
@@ -1989,8 +2091,8 @@ namespace ConnectionService
                     }
                 }
 
-                StoreContainerStatus containerStatus = new StoreContainerStatus(_container.IccId, _location.LocationId, statusMsgList);
-                ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, containerStatus);
+                StoreContainerStatus containerStatus = new StoreContainerStatus(_location.LocationId, _container.IccId, statusMsgList);
+                ConnectionControl.SkpApiClient.StoreContainerStatus(_container.ContainerId, containerStatus);
 
                 return true;
             }
@@ -2027,8 +2129,9 @@ namespace ConnectionService
 
                         bool bIncludedInTransaction = false;
                         bool bShouldNotfiyUser = true;
+                        bool bStoreInHistory = true;
 
-                        statusMsgList.Add(new StatusMessageDto(code, date.ToUniversalTime(), bIncludedInTransaction, bShouldNotfiyUser, _container.ActualFillingLevel));
+                        statusMsgList.Add(new StatusMessageDto(code, _container.ActualFillingLevel, bIncludedInTransaction, bShouldNotfiyUser, bStoreInHistory, date.ToUniversalTime()));
 
                         string message = Controller.GetTranslation("Message", _container.OperatorLanguage);
                         message += ": ";
@@ -2081,7 +2184,7 @@ namespace ConnectionService
 //                            ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, status);
                         }
 
-                        LogFile.WriteMessageToLogFile("{0}: Stored Event: {1}, time: {2}", this.Name, code, date);
+                        LogFile.WriteMessageToLogFile("{0} Stored Event: {1}, time: {2}", this.Name, code, date);
 
                         String smsMessage = "\nIdent Nr.: " + _container.IdentString + "\n";
                         smsMessage += message + "\n";
@@ -2098,8 +2201,8 @@ namespace ConnectionService
                         ConnectionControl.DoAlerting(_container.ContainerId, code, smsMessage, "", "");
                     }
 
-                    StoreContainerStatus containerStatus = new StoreContainerStatus(_container.IccId, _location.LocationId, statusMsgList);
-                    ConnectionControl.SkpApiClient.StoreContainerStatusMethod(_container.ContainerId, containerStatus);
+                    StoreContainerStatus containerStatus = new StoreContainerStatus(_location.LocationId, _container.IccId, statusMsgList);
+                    ConnectionControl.SkpApiClient.StoreContainerStatus(_container.ContainerId, containerStatus);
                 }
             }
             catch (Exception e)
@@ -2110,7 +2213,7 @@ namespace ConnectionService
             return false;
         }
 
-        private string TrimCustomerNumber(string custNumber)
+        static string TrimCustomerNumber(string custNumber, string dbgName)
         {
             for (int i = 0; i < custNumber.Length; i++)
             {
@@ -2123,7 +2226,7 @@ namespace ConnectionService
                         i--;
                     }
 
-                    LogFile.WriteMessageToLogFile("{0} Trimmed customer number: {1}", this.Name, custNumber.Substring(i, remainder));
+                    LogFile.WriteMessageToLogFile("{0} Trimmed customer number: {1}", dbgName, custNumber.Substring(i, remainder));
                     return custNumber.Substring(i, remainder);
                 }
             }
@@ -2131,7 +2234,7 @@ namespace ConnectionService
             return "";
         }
 
-        private bool ParseCustomerData(string str, ref CustomerAccessCard card)
+        static public bool ParseCustomerData(string str, string dbgName, ref CustomerAccessCard card)
         {
             try
             {
@@ -2154,7 +2257,7 @@ namespace ConnectionService
                         try { card.AccessTime = DateTime.ParseExact(toks[10], "ddMMyyyy", null); }
                         catch (Exception)
                         {
-                            LogFile.WriteErrorToLogFile("{0} Invalid access date format in customer access string: {1}", this.Name, str);
+                            LogFile.WriteErrorToLogFile("{0} Invalid access date format in customer access string: {1}", dbgName, str);
                         }
 
                         try
@@ -2164,31 +2267,31 @@ namespace ConnectionService
                         }
                         catch (Exception)
                         {
-                            LogFile.WriteErrorToLogFile("{0} Invalid access time format in customer access string: {1}", this.Name, str);
+                            LogFile.WriteErrorToLogFile("{0} Invalid access time format in customer access string: {1}", dbgName, str);
                         }
 
                         if (toks.GetLength(0) >= 14)
                         {
                             try { card.CardType = toks[12]; } catch { };
                             try { card.CardSerialNumber = toks[13]; } catch { };
-                            card.CardSerialNumber = TrimCustomerNumber(card.CardSerialNumber.Trim());
+                            card.CardSerialNumber = TrimCustomerNumber(card.CardSerialNumber.Trim(), dbgName);
                         }
                     }
                     catch (Exception excp)
                     {
-                        LogFile.WriteErrorToLogFile("{0} Exception ({1}) while trying to parse customer data. ({2})", this.Name, excp.Message, str);
+                        LogFile.WriteErrorToLogFile("{0} Exception ({1}) while trying to parse customer data. ({2})", dbgName, excp.Message, str);
                         return false;
                     }
                 }
                 else
                 {
-                    LogFile.WriteErrorToLogFile("{0} customer access string. Invalid format: ({1})", this.Name, str);
+                    LogFile.WriteErrorToLogFile("{0} customer access string. Invalid format: ({1})", dbgName, str);
                     return false;
                 }
             }
             catch (Exception excp)
             {
-                LogFile.WriteErrorToLogFile("{0} Exception ({1}) while trying to split customer data. ({2})", this.Name, excp.Message, str);
+                LogFile.WriteErrorToLogFile("{0} Exception ({1}) while trying to split customer data. ({2})", dbgName, excp.Message, str);
                 return false;
             }
 
@@ -2203,34 +2306,41 @@ namespace ConnectionService
             {
                 CustomerAccessCard card = new CustomerAccessCard();
 
-                if (ParseCustomerData(frame, ref card))
+                if (ParseCustomerData(frame, this.Name, ref card))
                 {
-                    CardAccessResult? access = CardAccessResult.CardNotFound;
+                    CardInfoDto cardInfo = null;
 
                     if (card.CustomerNumber != 0)
                     {
                         // check if customer access is allowed
-                        HasCardAccessToLocationFractionByCustomerNumber checkAccess = new HasCardAccessToLocationFractionByCustomerNumber((int)card.CustomerNumber, this._container.OperatorId, this._location.LocationId);
-                        access = ConnectionControl.SkpApiClient.HasCardAccessByCustomerNumber(checkAccess);
-                        LogFile.WriteMessageToLogFile($"Has Access {card.CustomerNumber}: {access}");
+                        HasCardAccessToLocationFractionByCustomerNumber checkAccess = new HasCardAccessToLocationFractionByCustomerNumber((int)card.CustomerNumber, this._location.LocationId, this._container.OperatorId);
+                        cardInfo = ConnectionControl.SkpApiClient.GetCardInfoByCustomerNumber(checkAccess);
+                        LogFile.WriteMessageToLogFile($"Has Access {card.CustomerNumber}: {cardInfo.CardAccess}");
                     }
                     else
                     {
-                        string uuid = card.CardType + ":" + card.CardSerialNumber;
-                        HasCardAccessToLocationFractionByCardUuid checkAccess = new HasCardAccessToLocationFractionByCardUuid(uuid, this._container.OperatorId, this._location.LocationId);
-                        access = ConnectionControl.SkpApiClient.HasCardAccessByCardUuid(checkAccess);
-                        LogFile.WriteMessageToLogFile($"Has Access {uuid}: {access}");
+                        string uuid = card.CardType + card.CardSerialNumber;
+                        HasCardAccessToLocationFractionByCardUuid checkAccess = new HasCardAccessToLocationFractionByCardUuid(uuid, this._location.LocationId, this._container.OperatorId);
+                        cardInfo = ConnectionControl.SkpApiClient.GetCardInfoByCardUuid(checkAccess);
+                        LogFile.WriteMessageToLogFile($"Has Access {uuid}: {cardInfo.CardAccess}");
                     }
 
-                    if (access == CardAccessResult.Ok)
+                    if (cardInfo != null && cardInfo.CardAccess == CardAccessResult.Ok)
                     {
                         SendCommand("#CUS!");
                     }
                     else
                     {
-                        string answer = String.Format("#CUS: {0};", (int)access); 
+                        string answer = String.Format("#CUS: {0};", (int)cardInfo.CardAccess); 
                         SendCommand(answer);
                     }
+                }
+            }
+            else if (frame.StartsWith("%STAT="))
+            {
+                if (analyseStatus(frame))
+                {
+                    state = _CLIENT_STATE.START_READ_JOURNAL;
                 }
             }
 
@@ -2420,7 +2530,7 @@ namespace ConnectionService
                 }
                 catch (Exception excp)
                 {
-                    LogFile.WriteErrorToLogFile("{0}: Exception: {1}, while trying to update container geo position: {2}, {3}", this.Name, excp.Message, lat, lng);
+                    LogFile.WriteErrorToLogFile("{0} Exception: {1}, while trying to update container geo position: {2}, {3}", this.Name, excp.Message, lat, lng);
                 }
 
                 try
@@ -2429,7 +2539,7 @@ namespace ConnectionService
                 }
                 catch (Exception excp)
                 {
-                    LogFile.WriteErrorToLogFile("{0}: Exception: {1}, while trying to update container geo position: {2}, {3}", this.Name, excp.Message, lat, lng);
+                    LogFile.WriteErrorToLogFile("{0} Exception: {1}, while trying to update container geo position: {2}, {3}", this.Name, excp.Message, lat, lng);
                 }
             }
             else
@@ -2491,6 +2601,7 @@ namespace ConnectionService
                     catch (Exception excp)
                     {
                         LogFile.WriteErrorToLogFile("Exception: {0}, while trying to parse identify string", excp.Message);
+                        return false;
                     }
 
                     _container.IccId = strIdent.Substring(0, posComma);
@@ -2511,13 +2622,25 @@ namespace ConnectionService
                     ContainerParamsDto contParams = (ContainerParamsDto)ConnectionControl.SkpApiClient.GetContainerParams(_container.IccId);
                     SkpContainerFeaturesDto contFeatures = (SkpContainerFeaturesDto)ConnectionControl.SkpApiClient.GetContainerMachineData((int)contParams.Id);
 
+                    this.Name = String.Format("ContainerID {0}:", contParams.Id);
+                    LogFile.WriteMessageToLogFile("{0} Ident: {1}", this.Name, strIdent);
+
+                    try
+                    {
+                        ConnectionControl.SkpApiClient.UpdateContainerLastCommunication(contParams.Id, new UpdateLastCommunication(DateTime.Now));
+                    }
+                    catch (Exception excp)
+                    {
+                        LogFile.WriteErrorToLogFile("Exception: {0} while trying to store last communication date", excp.Message);
+                    }
+
                     var singlefeatureList =  contFeatures.SingleValue;
 
-                    LogFile.WriteMessageToLogFile("{0}: SingleFeatures: {1}", this.Name, singlefeatureList.Count);
+                    LogFile.WriteMessageToLogFile("{0} SingleFeatures: {1}", this.Name, singlefeatureList.Count);
 
                     foreach (string feature in singlefeatureList.Values)
                     {
-                        LogFile.WriteMessageToLogFile("{0}:  Feature: {1}", this.Name, feature);
+                        LogFile.WriteMessageToLogFile("{0}  Feature: {1}", this.Name, feature);
 
                         if (feature.IndexOf("Hubkipp Grundausstattung") != -1)
                         {
@@ -2552,7 +2675,7 @@ namespace ConnectionService
                     {
                         foreach (string feature in featureList)
                         {
-                            LogFile.WriteMessageToLogFile("{0}:  Feature: {1}", this.Name, feature);
+                            LogFile.WriteMessageToLogFile("{0}  Feature: {1}", this.Name, feature);
 
                             if (feature.IndexOf("Hubkipp Grundausstattung") != -1)
                             {
@@ -2624,7 +2747,8 @@ namespace ConnectionService
 
                         LogFile.WriteMessageToLogFile("{0} Get locations for this geopos", this.Name);
 
-                        foreach (var location in ConnectionControl.SkpApiClient.GetLocationsForOperator(_container.OperatorId, new GetSkpLocations { MinLatitude = lat - 0.0030F, MaxLatitude = lat + 0.0030F, MinLongitude = lng - 0.003F, MaxLongitude = lng + 0.003F }))
+                        GetSkpLocations getLoc = new GetSkpLocations(lat + 0.0030F, lng + 0.0030F, lat - 0.0030F, lng - 0.0030F);
+                        foreach (var location in ConnectionControl.SkpApiClient.GetLocationsForOperator(_container.OperatorId, getLoc))
                         {
                             Location loc = new Location();
 
@@ -2811,7 +2935,7 @@ namespace ConnectionService
                                 _location.MachineUtilization = loc.MachineUtilization;
                                 _location.PressStrokes = loc.PressStrokes;
 
-                                LogFile.WriteMessageToLogFile("{0}: Take data from 2.0 database: {1}, {2}, {3}, {4}, {5}, {6}, {7}", this.Name,
+                                LogFile.WriteMessageToLogFile("{0} Take data from 2.0 database: {1}, {2}, {3}, {4}, {5}, {6}, {7}", this.Name,
                                     _location.PressStrokes, _location.PressPosition, _location.FullWarningLevel, _location.FullErrorLevel,
                                     _location.MachineUtilization, _location.IsLiftTiltEquipped, _location.IsRetroKitEquipped);
                             }
@@ -2827,7 +2951,7 @@ namespace ConnectionService
                                 _location.MachineUtilization = 100;
                                 _location.PressStrokes = 3;
 
-                                LogFile.WriteMessageToLogFile("{0}: Not found in 2.0 database take default settings: {1}, {2}, {3}, {4}, {5}, {6}, {7}", this.Name,
+                                LogFile.WriteMessageToLogFile("{0} Not found in 2.0 database take default settings: {1}, {2}, {3}, {4}, {5}, {6}, {7}", this.Name,
                                     _location.PressStrokes, _location.PressPosition, _location.FullWarningLevel, _location.FullErrorLevel,
                                     _location.MachineUtilization, _location.IsLiftTiltEquipped, _location.IsRetroKitEquipped);
                             }
@@ -2846,7 +2970,7 @@ namespace ConnectionService
                 }
                 catch (Exception e)
                 {
-                    LogFile.WriteErrorToLogFile("{0}: {1} in \'GetContainerAndLocation\' appeared.", this.Name, e.Message);
+                    LogFile.WriteErrorToLogFile("{0} {1} in \'GetContainerAndLocation\' appeared.", this.Name, e.Message);
                     retval = false;
                 }
                 finally
@@ -2856,7 +2980,7 @@ namespace ConnectionService
             }
             catch (Exception excp)
             {
-                LogFile.WriteErrorToLogFile("{0}: Exception: {1} while trying to get container parameters", this.Name, excp.Message);
+                LogFile.WriteErrorToLogFile("{0} Exception: {1} while trying to get container parameters", this.Name, excp.Message);
             }
 
             // remove any possible zombie clients with the same name
@@ -3093,6 +3217,9 @@ namespace ConnectionService
                         case _CLIENT_STATE.ONLINE:
                             if (_receivedFrames.Count > 0)
                             {
+                                // events are no more supported
+                                // but we use this here to check for customer access
+                                // or status reports
                                 if ((str = getFrame("%EVT=")) != "")
                                     ReadEvents(str);
                             }
