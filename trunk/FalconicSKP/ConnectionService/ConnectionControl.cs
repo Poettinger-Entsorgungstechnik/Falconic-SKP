@@ -29,6 +29,7 @@ using Mailjet.Client;
 using Mailjet.Client.Resources;
 using System.Net.Http;
 using softaware.Authentication.Hmac.Client;
+using System.Xml;
 
 //   Version History:
 
@@ -92,6 +93,19 @@ namespace ConnectionService
     [Serializable]
     public class ConnectionControl : MarshalByRefObject
     {
+        #region internal classes
+
+        class DataImportExportClient
+        {
+            public string name;                 // operator name
+            public int operatorId;             // operator identifier
+            public string exportFormat;        // data export format .csv, .xml, .csv .xml
+            public Thread workerThread;         // worker thread
+            public SKP.CustomerImportExport.DataImportExport client;
+        }
+
+        #endregion
+
         #region constants
 
         #endregion
@@ -121,7 +135,9 @@ namespace ConnectionService
 
         private ArrayList _clients = new ArrayList(100);	        // list of actual connected clients, allow 100 clients as default, can be increased
         private ArrayList _ECOClients = new ArrayList(100);	        // list of actual connected clients, allow 100 clients as default, can be increased
-        private ArrayList _SMSClients = new ArrayList(100);	        // list of actual connected clients, allow 100 clients as default, can be increased
+        private ArrayList _SMSClients = new ArrayList(100);         // list of actual connected clients, allow 100 clients as default, can be increased
+        private ArrayList _imexport = new ArrayList();
+
         private Mutex _emailMutex = new Mutex();
         private DateTime _tLastLocationCheck = DateTime.Now.Subtract(new TimeSpan(0,1,0,0,0));
         private Hashtable _lastMonitoringMessage = new Hashtable();
@@ -377,6 +393,8 @@ namespace ConnectionService
 
             LogFile.WriteMessageToLogFile("{0} Send Start Email", this.ToString());
 
+            InitDataImportExport();
+
             try
             {
                 ArrayList emailRecipients = new ArrayList();
@@ -607,6 +625,74 @@ namespace ConnectionService
 
         #region Methods
 
+        private bool InitDataImportExport()
+        {
+            bool retval = false;
+            // read configuration
+            string fileName = System.AppDomain.CurrentDomain.BaseDirectory + "DataImportExport.config";
+
+            XmlTextReader reader = null;
+            string elementName = "";
+            DataImportExportClient client = null;
+
+            try
+            {
+                // Load the reader with the configuration file and ignore all white space nodes.         
+                reader = new XmlTextReader(fileName);
+                reader.WhitespaceHandling = WhitespaceHandling.None;
+
+                // Parse the file and display each of the nodes.
+                while (reader.Read())
+                {
+                    switch (reader.NodeType)
+                    {
+                        case XmlNodeType.Element:
+                            if (reader.Name == "plugin")
+                            {
+                                client = new DataImportExportClient();
+                                _imexport.Add(client);
+                            }
+                            else
+                                elementName = reader.Name;
+                            break;
+
+                        case XmlNodeType.Text:
+                            if (elementName == "NAME")
+                                client.name = reader.Value;
+                            else if (elementName == "OPERATOR_ID")
+                                client.operatorId = System.Convert.ToInt32(reader.Value);
+                            else if (elementName == "EXPORT_FORMAT")
+                                client.exportFormat = reader.Value;
+                            break;
+
+                        case XmlNodeType.EndElement:
+                            if (reader.Name == "plugin")
+                            {
+                                // start data import export module thread with operator id 
+                                client.client = new SKP.CustomerImportExport.DataImportExport(this, client.operatorId, client.exportFormat);
+                                ThreadStart threadStart = new ThreadStart(client.client.DoWork);
+                                client.workerThread = new Thread(threadStart);
+                                client.workerThread.Start();
+
+                                LogFile.WriteMessageToLogFile("{0}: Start data import export workerthread for client: {1}", this.GetType().ToString(), client.name);
+                            }
+                            break;
+                    }
+                }
+            }
+            catch (Exception excp)
+            {
+                LogFile.WriteErrorToLogFile("Exception {1} while trying to read data import export configuration", excp.Message);
+            }
+            finally
+            {
+                if (reader != null)
+                    reader.Close();
+            }
+
+            return retval;
+        }
+
         public void SendSMS(string text, string telnumber)
         {
             ArrayList users = new ArrayList();
@@ -819,8 +905,8 @@ namespace ConnectionService
                                     }
                                     catch (Exception excp)
                                     {
-                                        LogFile.WriteErrorToLogFile("{0} Exception ({1}) while tring to ...", this.ToString(), excp.Message);
-                                        LogFile.WriteMessageToLogFile("{0}", excp.StackTrace);
+//                                        LogFile.WriteErrorToLogFile("{0} Exception ({1}) while tring to ...", this.ToString(), excp.Message);
+//                                        LogFile.WriteMessageToLogFile("{0}", excp.StackTrace);
                                     }
                                 }
 
@@ -910,6 +996,12 @@ namespace ConnectionService
                 foreach (object x in _WIPClients)
                 {
                     ((SKP.ClientConnection)x).Stop();
+                }
+
+                // stop all eco client threads
+                foreach (object x in _ECOClients)
+                {
+                    ((ECO.ClientConnection)x).Stop();
                 }
 
                 // stop all sms client threads
@@ -1003,6 +1095,7 @@ namespace ConnectionService
         private DateTime _accessTime;               // Timepoint of machine access
         private string _cardType;                   // Type of card 0041 HITAG, 0080 MyFare
         private string _cardSerialNumber;           // hex formatted card serial number
+        private string _cardSerialNumberUntrimmed;  // hex formatted card serial number
 
         #endregion
 
@@ -1020,6 +1113,7 @@ namespace ConnectionService
         public DateTime AccessTime { get => _accessTime; set => _accessTime = value; }
         public string CardType { get => _cardType; set => _cardType = value; }
         public string CardSerialNumber { get => _cardSerialNumber; set => _cardSerialNumber = value; }
+        public string CardSerialNumberUntrimmed { get => _cardSerialNumberUntrimmed; set => _cardSerialNumberUntrimmed = value; }
 
         #endregion
 
@@ -1823,8 +1917,19 @@ namespace ConnectionService
                                     networkInfo += " - LAC: " + locationAreaCode;
                                     networkInfo += " - CELLID: " + cellId;
 
+                                    FirmwareType ft = FirmwareType.Presscontrol;
 
-                                    StoreContainerHardwareInformation info = new StoreContainerHardwareInformation(networkInfo, FirmwareType.Presscontrol, _container.ModemFirmwareVersion, _container.ModemSignalQuality,
+                                    if (_container.ModemFirmwareVersion.IndexOf("SSC-") != -1)
+                                    {
+                                        ft = FirmwareType.Ssc;
+                                        int pos1 = _container.ModemFirmwareVersion.LastIndexOf("-");
+                                        if (pos1 != -1)
+                                            _container.ModemFirmwareVersion = _container.ModemFirmwareVersion.Substring(pos1 + 1);
+
+                                        LogFile.WriteMessageToLogFile("{0} - SSC with firmware version: {1}", this.Name, _container.ModemFirmwareVersion);
+                                    }
+
+                                    StoreContainerHardwareInformation info = new StoreContainerHardwareInformation(networkInfo, ft, _container.ModemFirmwareVersion, _container.ModemSignalQuality,
                                         numberOfStartings, minutesOfOperation, DateTime.Now);
 
                                     if (_numberOfStartingsLastCycle != info.NumberOfStartings ||
@@ -2274,6 +2379,7 @@ namespace ConnectionService
                         {
                             try { card.CardType = toks[12]; } catch { };
                             try { card.CardSerialNumber = toks[13]; } catch { };
+                            card.CardSerialNumberUntrimmed = card.CardSerialNumber;
                             card.CardSerialNumber = TrimCustomerNumber(card.CardSerialNumber.Trim(), dbgName);
                         }
                     }
@@ -3151,9 +3257,9 @@ namespace ConnectionService
                                 else
                                     numberOfExpectedEntries = _container.WritePointer + (_container.JournalSize - _container.ReadPointer);
 
-                                // maximum allowed in one frame is 60
-                                if (numberOfExpectedEntries > 60)
-                                    numberOfExpectedEntries = 60;
+                                // maximum allowed in one frame is 30
+                                if (numberOfExpectedEntries > 30)
+                                    numberOfExpectedEntries = 30;
 
                                 String command = String.Format("#JOU?{0},{1}", _container.ReadPointer, numberOfExpectedEntries);
                                 SendCommand(command);
