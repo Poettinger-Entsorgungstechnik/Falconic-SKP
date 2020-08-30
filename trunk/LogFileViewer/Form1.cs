@@ -144,9 +144,11 @@ namespace LogFileViewer
                             {
                                 string[] lineToks = str.Split(new char[] { '\n' });
                                 str = "";
+                                string strSearch = "ContainerID " + txtFilterContainer.Text.Trim();
+                                strSearch += ": ";
                                 foreach (string s in lineToks)
                                 {
-                                    if (s.IndexOf("ContainerID " + txtFilterContainer.Text) != -1)
+                                    if (s.IndexOf(strSearch) != -1)
                                         str += s + '\n';
                                 }
                             }
