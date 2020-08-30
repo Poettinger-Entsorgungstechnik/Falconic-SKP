@@ -1349,6 +1349,8 @@ namespace SKP
                         string[] toks = gsm_number.Split(new char[] { ',' });
                         if (toks.GetLength(0) >= 2)
                         {
+                            // for example: ECO-ELS61T-Linux-1.2.008 or: ECO-ELS61T-Java-11.0.12
+                            // 
                             _client.ModemFirmwareVersion = toks[1].Trim();
                             _client.ModemSignalQuality = System.Convert.ToUInt16(toks[2].Trim());
                         }
