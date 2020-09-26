@@ -2108,7 +2108,9 @@ namespace ConnectionService
                                     double currentBalance = 0.0F;
                                     double weightInKilo = 0.0F;
 
-                                    CreateInsertionTransactionByCardUuid trans = new CreateInsertionTransactionByCardUuid(alibiStorageNumber, cardSerialNumber, 
+                                    string uuid = cardType + cardSerialNumber;
+
+                                    CreateInsertionTransactionByCardUuid trans = new CreateInsertionTransactionByCardUuid(alibiStorageNumber, uuid, 
                                         chargedAmount, _container.ContainerId, currentBalance, duration, _location.LocationId, null, _container.OperatorId,
                                         code, date.ToUniversalTime(), weightInKilo);
 
@@ -2127,6 +2129,8 @@ namespace ConnectionService
                                     double chargedAmount = 0.0F;
                                     double currentBalance = 0.0F;
                                     double weightInKilo = 0.0F;
+
+                                    string uuid = cardType + cardSerialNumber;
 
                                     CreateInsertionTransactionByCustomerNumber trans = new CreateInsertionTransactionByCustomerNumber(alibiStorageNumber, cardSerialNumber,
                                         chargedAmount, _container.ContainerId, currentBalance, cusNumber, duration, _location.LocationId, null, _container.OperatorId,

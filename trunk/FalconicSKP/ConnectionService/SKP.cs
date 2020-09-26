@@ -344,6 +344,7 @@ namespace SKP
         private Queue _fromEco = new Queue();
         private Queue _serviceCommands = new Queue();                       // queue for service commands
         private bool _bIsTestClient = false;
+        private UInt32 _actualFileBlock = 0;
 
         [NonSerialized] 
         private TcpClient _tcpClient;                       // tcp client class
@@ -1349,10 +1350,39 @@ namespace SKP
                         string[] toks = gsm_number.Split(new char[] { ',' });
                         if (toks.GetLength(0) >= 2)
                         {
+                            int pos = 0;
+
                             // for example: ECO-ELS61T-Linux-1.2.008 or: ECO-ELS61T-Java-11.0.12
                             // 
                             _client.ModemFirmwareVersion = toks[1].Trim();
                             _client.ModemSignalQuality = System.Convert.ToUInt16(toks[2].Trim());
+
+                            if ((pos = _client.ModemFirmwareVersion.IndexOf("ECO-ELS61T-Linux")) != -1)
+                            {
+                                try
+                                {
+                                    string strVersion = _client.ModemFirmwareVersion.Substring(pos + 17);
+
+                                    int major = 0;
+                                    int minor = 0;
+                                    int build = 0;
+
+                                    string[] toks1 = strVersion.Split(new char[] { '.' });
+
+                                    major = Convert.ToInt32(toks1[0]);
+                                    minor = Convert.ToInt32(toks1[1]);
+                                    build = Convert.ToInt32(toks1[2]);
+
+                                    if (major >=1 && minor >= 2 && build >= 12)
+                                    {
+                                        LogFile.WriteMessageToLogFile("{0} Check for firmwareupdate. Actualversion is: {1}.{2}.{3}", this.Name, major.ToString("D1"), minor.ToString("D1"), build.ToString("D3"));
+                                    }
+                                }
+                                catch (Exception excp)
+                                {
+                                    LogFile.WriteErrorToLogFile("{0} Exception: {1} while trying to parse firmware string!", this.Name, excp.Message);
+                                }
+                            }
                         }
                     }
                     catch
@@ -1952,6 +1982,108 @@ namespace SKP
             catch (Exception excp)
             {
                 LogFile.WriteErrorToLogFile("{0} Exception: {1} in function SendQuitCommand.", this.Name, excp.Message);
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool SendStartFileTransferCommand(string strPath, UInt32 fileSize)
+        {
+            try
+            {
+                Int32 filePathLength = strPath.Length;
+                byte chk = 0;
+                byte[] send_data = new byte[filePathLength + 10];
+
+                send_data[0] = 0x02;    // STX
+                send_data[1] = 0x50;    // Start file transfer
+                send_data[2] = (byte)((fileSize & 0xff000000) >> 24);
+                send_data[3] = (byte)((fileSize & 0x00ff0000) >> 16);
+                send_data[4] = (byte)((fileSize & 0x0000ff00) >> 8);
+                send_data[5] = (byte)((fileSize & 0x000000ff));
+                send_data[6] = (byte)((filePathLength & 0xff00) >> 8);
+                send_data[7] = (byte)((filePathLength & 0x00ff));
+
+                Array.Copy(Encoding.ASCII.GetBytes(strPath), 0, send_data, 8, filePathLength);
+
+                for (int i = 0; i < filePathLength + 8; i++)
+                    chk += send_data[i];
+
+                send_data[filePathLength + 8] = chk;
+                send_data[filePathLength + 9] = 0x03;   // ETX
+
+                _tcpClient.Client.Send(send_data);
+                _tLastCommandToEco = DateTime.Now;
+
+                if (_bLogDetails) LogFile.WriteMessageToLogFile("{0} StartFileTransfer to: {1}", this.Name, strPath);
+
+                _actualFileBlock = 0;
+            }
+            catch (Exception excp)
+            {
+                LogFile.WriteErrorToLogFile("{0} Exception: {1} in function SendStartFileTransferCommand.", this.Name, excp.Message);
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool SendFileBlockCommand(byte[] block, UInt32 blockSize)
+        {
+            try
+            {
+                byte chk = 0;
+                byte[] send_data = new byte[blockSize + 6];
+
+                send_data[0] = 0x02;    // STX
+                send_data[1] = 0x51;    // Upload file block
+                send_data[2] = (byte)((blockSize & 0xff00) >> 8);
+                send_data[3] = (byte)((blockSize & 0x00ff));
+
+                Array.Copy(block, 0, send_data, 4, blockSize);
+
+                for (int i = 0; i < blockSize + 4; i++)
+                    chk += send_data[i];
+
+                send_data[blockSize + 4] = chk;
+                send_data[blockSize + 5] = 0x03;   // ETX
+
+                _tcpClient.Client.Send(send_data);
+                _tLastCommandToEco = DateTime.Now;
+
+                if (_bLogDetails) LogFile.WriteMessageToLogFile("{0} Upload block: {1}", this.Name, _actualFileBlock++);
+            }
+            catch (Exception excp)
+            {
+                LogFile.WriteErrorToLogFile("{0} Exception: {1} in function SendFileBlockCommand.", this.Name, excp.Message);
+                return false;
+            }
+
+            return true;
+        }
+
+        private bool SendFileInstallCommand()
+        {
+            try
+            {
+                byte[] send_data = new byte[6];
+
+                send_data[0] = 0x02;    // STX
+                send_data[1] = 0x52;    // Install file
+                send_data[2] = 0;
+                send_data[3] = 0;
+                send_data[4] = 0;
+                send_data[5] = 0x03;   // ETX
+
+                _tcpClient.Client.Send(send_data);
+                _tLastCommandToEco = DateTime.Now;
+
+                if (_bLogDetails) LogFile.WriteMessageToLogFile("{0} Send File install command", this.Name);
+            }
+            catch (Exception excp)
+            {
+                LogFile.WriteErrorToLogFile("{0} Exception: {1} in function SendFileInstallCommand.", this.Name, excp.Message);
                 return false;
             }
 
