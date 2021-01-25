@@ -1342,7 +1342,6 @@ namespace SKP
             {
                 String fullString = gsm_number = gsm_number.Substring(5);
                 int posComma = 0;
-                // if we have a modem which sends it's softwareversion -> remove it
                 if ((posComma = gsm_number.IndexOf(',')) != -1)
                 {
                     try
@@ -1350,39 +1349,10 @@ namespace SKP
                         string[] toks = gsm_number.Split(new char[] { ',' });
                         if (toks.GetLength(0) >= 2)
                         {
-                            int pos = 0;
-
                             // for example: ECO-ELS61T-Linux-1.2.008 or: ECO-ELS61T-Java-11.0.12
                             // 
                             _client.ModemFirmwareVersion = toks[1].Trim();
                             _client.ModemSignalQuality = System.Convert.ToUInt16(toks[2].Trim());
-
-                            if ((pos = _client.ModemFirmwareVersion.IndexOf("ECO-ELS61T-Linux")) != -1)
-                            {
-                                try
-                                {
-                                    string strVersion = _client.ModemFirmwareVersion.Substring(pos + 17);
-
-                                    int major = 0;
-                                    int minor = 0;
-                                    int build = 0;
-
-                                    string[] toks1 = strVersion.Split(new char[] { '.' });
-
-                                    major = Convert.ToInt32(toks1[0]);
-                                    minor = Convert.ToInt32(toks1[1]);
-                                    build = Convert.ToInt32(toks1[2]);
-
-                                    if (major >=1 && minor >= 2 && build >= 12)
-                                    {
-                                        LogFile.WriteMessageToLogFile("{0} Check for firmwareupdate. Actualversion is: {1}.{2}.{3}", this.Name, major.ToString("D1"), minor.ToString("D1"), build.ToString("D3"));
-                                    }
-                                }
-                                catch (Exception excp)
-                                {
-                                    LogFile.WriteErrorToLogFile("{0} Exception: {1} while trying to parse firmware string!", this.Name, excp.Message);
-                                }
-                            }
                         }
                     }
                     catch
@@ -1441,6 +1411,43 @@ namespace SKP
                         }
 
                         this.Name = new_name;
+                        int pos = 0;
+
+                        if ((pos = _client.ModemFirmwareVersion.IndexOf("ECO-ELS61T-Linux")) != -1)
+                        {
+                            try
+                            {
+                                string strVersion = _client.ModemFirmwareVersion.Substring(pos + 17);
+
+                                int major = 0;
+                                int minor = 0;
+                                int build = 0;
+
+                                string[] toks1 = strVersion.Split(new char[] { '.' });
+
+                                major = Convert.ToInt32(toks1[0]);
+                                minor = Convert.ToInt32(toks1[1]);
+                                build = Convert.ToInt32(toks1[2]);
+
+                                if (major >= 1 && minor >= 2 && build >= 12)
+                                {
+                                    if (strVersion != Controller.FwVersionELS61TLinux)
+                                    {
+                                        LogFile.WriteMessageToLogFile("{0} Firmware on modem is not up2date! Should be: {1}", this.Name, Controller.FwVersionELS61TLinux);
+                                        DoModemFirmwareUpdate(_client.ModemFirmwareVersion);
+                                    }
+                                    else
+                                    {
+                                        LogFile.WriteMessageToLogFile("{0} Firmware on modem is up2date! ({1})", this.Name, Controller.FwVersionELS61TLinux);
+                                    }
+                                }
+                            }
+                            catch (Exception excp)
+                            {
+                                LogFile.WriteErrorToLogFile("{0} Exception: {1} while trying to parse firmware string!", this.Name, excp.Message);
+                            }
+                        }
+
                         break;
                     }
 
@@ -1956,6 +1963,63 @@ namespace SKP
         #endregion
 
         #region Protocol methods
+
+        private bool DoModemFirmwareUpdate(string strVersion)
+        {
+            string path = "C:\\SKP\\Firmware\\";
+
+            if (strVersion.IndexOf("ECO-ELS61T-Linux") != -1)
+            {
+                path += "ECO-ELS61T-Linux\\ELS61-";
+                path += Controller.FwVersionELS61TLinux;
+                path += ".tgz";
+
+                FileInfo fileInfo = new FileInfo(path);
+
+                SendStartFileTransferCommand("/usr/local/ELS61.tgz", (uint)fileInfo.Length);
+
+                try
+                {
+                    FileStream stream = new FileStream(path, FileMode.Open, FileAccess.Read);
+                    byte[] block = new byte[1024];
+                    int numbytesRead = 0;
+                    string answer = "";
+                    while ((numbytesRead = stream.Read(block, 0, 1024)) > 0)
+                    {
+                        answer = "";
+                        SendFileBlockCommand(block, (uint)numbytesRead);
+
+                        // wait for answer
+                        for (int i = 0; i < 5; i++)
+                        {
+                            _receivedEvent.WaitOne(1000);
+                            if (_fromEco.Count > 0)
+                            {
+                                lock (_fromEco.SyncRoot)
+                                {
+                                    answer = (string)_fromEco.Dequeue();
+                                }
+                                break;
+                            }
+                        }
+
+                        if (answer.IndexOf("%OK") == -1)
+                        {
+                            LogFile.WriteMessageToLogFile("{0} - Wrong answer: ({1}) received - stop here!", this.Name, answer);
+                            return false;
+                        }
+                    }
+
+                    return true;
+                }
+                catch (Exception excp)
+                {
+                    LogFile.WriteErrorToLogFile("{0} Exception ({1}) while trying to transfer firmwarefile to modem", this.Name, excp.Message);
+                }
+            }
+
+            return false;
+        }
 
         /// <summary>
         /// send quit connection command

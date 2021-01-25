@@ -56,11 +56,11 @@
   <ItemGroup>
     <Reference Include="Falconic.Messaging, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\..\..\Falconic\Softaware\SKP Client 2020-02-24\Falconic.Messaging\bin\Debug\netstandard2.0\Falconic.Messaging.dll</HintPath>
+      <HintPath>..\..\..\..\..\Falconic\Softaware\SKP Client 2020-10-19\Falconic.Messaging\bin\Debug\netstandard2.0\Falconic.Messaging.dll</HintPath>
     </Reference>
     <Reference Include="Falconic.Skp.Api.Client, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\..\..\..\Falconic\Softaware\SKP Client 2020-02-24\Falconic.Skp.Api.Client\bin\Debug\netstandard2.0\Falconic.Skp.Api.Client.dll</HintPath>
+      <HintPath>..\..\..\..\..\Falconic\Softaware\SKP Client 2020-10-19\Falconic.Skp.Api.Client\bin\Debug\netstandard2.0\Falconic.Skp.Api.Client.dll</HintPath>
     </Reference>
     <Reference Include="Mailjet.Client">
       <HintPath>..\Mailjet.Client.dll</HintPath>

@@ -2654,7 +2654,7 @@ namespace SKP
                     }
                 }
             }
-            catch (Exception e)
+            catch (Exception)
             {
 //                LogFile.WriteErrorToLogFile("{0} in \'GetLocationTimeZone\' appeared.", e.Message);
                 retval = false;

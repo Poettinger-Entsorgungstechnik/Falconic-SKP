@@ -904,6 +904,7 @@ namespace ECO
                 LogFile.WriteMessageToLogFile("{0} Received customer acknowledge", this.Name);
                 return;
             }
+
             try
             {
                 CustomerAccessCard card = new CustomerAccessCard();
@@ -1018,7 +1019,7 @@ namespace ECO
                     try
                     {
                         List<StatusMessageDto> statusMsgList = new List<StatusMessageDto>();
-                        statusMsgList.Add(new StatusMessageDto(code, null, false, true, false, date.ToUniversalTime()));
+                        statusMsgList.Add(new StatusMessageDto(code, null, true, false, date.ToUniversalTime()));
                         StoreContainerStatus containerStatus = new StoreContainerStatus(this._locationParams.LocationId, this._containerParams.GsmNumber, statusMsgList);
                         ConnectionControl.SkpApiClient.StoreContainerStatus(this.ContainerID, containerStatus);
                     }
@@ -1360,7 +1361,7 @@ namespace ECO
                         {
                             try
                             {
-                                StatusMessageDto statusMessage = new StatusMessageDto(transStatusId, 0.0F, false, false, true, transDate.ToUniversalTime());
+                                StatusMessageDto statusMessage = new StatusMessageDto(transStatusId, 0.0F, false, true, transDate.ToUniversalTime());
                                 statusMsgList.Add(statusMessage);
                                 LogFile.WriteMessageToLogFile("{0} Store status messagecode: {1}, Timestamp: {2}", this.Name, transStatusId);
                             }
@@ -1376,8 +1377,8 @@ namespace ECO
                         {
                             try
                             {
-                                CreateInsertionTransactionByCardUuid trans = new CreateInsertionTransactionByCardUuid((alibiStoreNumber == "") ? null : alibiStoreNumber, (tranCustomerNumber == "") ? null : tranCustomerNumber, transAmount, this._container_id, transCurrentBalance,
-                                    transDuration, transLocationId, null, this._operator_id, transStatusId, transDate.ToUniversalTime(), transWeight);
+                                CreateInsertionTransactionByCardUuid trans = new CreateInsertionTransactionByCardUuid((alibiStoreNumber == "") ? null : alibiStoreNumber, (tranCustomerNumber == "") ? null : tranCustomerNumber, this._container_id,
+                                    transCurrentBalance, transDuration, transLocationId, this._operator_id, transStatusId, transDate.ToUniversalTime(), transWeight);
                                 ConnectionControl.SkpApiClient.CreateInsertionByCardUuid(trans);
                             }
                             catch (Exception excp)
@@ -1389,8 +1390,8 @@ namespace ECO
                         {
                             try
                             { 
-                                CreateInsertionTransactionByCustomerNumber trans = new CreateInsertionTransactionByCustomerNumber(alibiStoreNumber, tranCustomerNumber, transAmount, this._container_id,
-                                    transCurrentBalance, customerNumber, transDuration, transLocationId, null, this._operator_id, transStatusId,
+                                CreateInsertionTransactionByCustomerNumber trans = new CreateInsertionTransactionByCustomerNumber(alibiStoreNumber, tranCustomerNumber, this._container_id,
+                                    transCurrentBalance, customerNumber, transDuration, transLocationId, this._operator_id, transStatusId,
                                     transDate.ToUniversalTime(), transWeight);
                                 ConnectionControl.SkpApiClient.CreateInsertionByCustomerNumber(trans);
                             }

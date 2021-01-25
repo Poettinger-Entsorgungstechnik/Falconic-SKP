@@ -33,6 +33,10 @@ using System.Xml;
 
 //   Version History:
 
+//  1.2.0.06         -       25.01.2021
+
+//                   -       Handle actual fillinglevel when permanent online is selected                     
+
 //  1.2.0.05         -       01.03.2020
 
 //                   -       Eco Clients - New API for CreditBalance and LanguageId                    
@@ -142,6 +146,9 @@ namespace ConnectionService
         private DateTime _tLastLocationCheck = DateTime.Now.Subtract(new TimeSpan(0,1,0,0,0));
         private Hashtable _lastMonitoringMessage = new Hashtable();
         private FileSystemWatcher _fsWatcher = new FileSystemWatcher();
+        private FileSystemWatcher _fsWatcherFirmwareELS61TLinux = new FileSystemWatcher();
+
+        private String _fwVersionELS61TLinux;
 
         private Dictionary<int, Location> _2DotZero_Containers = new Dictionary<int, Location>();
         private Mutex _2DotZeroContainerMutex = new Mutex();
@@ -365,6 +372,22 @@ namespace ConnectionService
             // read file
             FsWatcher_Changed(this, new FileSystemEventArgs(WatcherChangeTypes.Changed, _fsWatcher.Path, "database.txt"));
 
+            try
+            {
+                _fsWatcherFirmwareELS61TLinux.Path = "C:\\SKP\\Firmware\\ECO-ELS61T-Linux\\";
+                _fsWatcherFirmwareELS61TLinux.NotifyFilter = NotifyFilters.LastWrite;
+                _fsWatcherFirmwareELS61TLinux.Filter = "*.txt";
+                _fsWatcherFirmwareELS61TLinux.Changed += _fsWatcherFirmwareELS61TLinux_Changed;
+                _fsWatcherFirmwareELS61TLinux.EnableRaisingEvents = true;
+                // read file
+                _fsWatcherFirmwareELS61TLinux_Changed(this, new FileSystemEventArgs(WatcherChangeTypes.Changed, _fsWatcherFirmwareELS61TLinux.Path, "ActualVersion.txt"));
+            }
+            catch (Exception excp)
+            {
+                LogFile.WriteErrorToLogFile("!! Exception: {0} !!", excp.Message);
+                LogFile.WriteErrorToLogFile("{0}", excp.StackTrace);
+            }
+
             /// <summary>
             /// WIP SKP service Methods can be removed after wip is merged to falconic
             /// </summary>
@@ -412,6 +435,31 @@ namespace ConnectionService
             }
 
             LogFile.WriteMessageToLogFile("{0} Startup complete :-)", this.ToString());
+        }
+
+        private void _fsWatcherFirmwareELS61TLinux_Changed(object sender, FileSystemEventArgs e)
+        {
+            LogFile.WriteMessageToLogFile("Firmwareversion for ELS61T (Linux) changed: {0}, {1}, {2}", e.FullPath, e.Name, e.ChangeType);
+
+            if (e.Name == "ActualVersion.txt" && e.ChangeType == WatcherChangeTypes.Changed)
+            {
+                // wait a bit till editor closed all resources
+                Thread.Sleep(100);
+
+                try
+                {
+                    // read the whole file into a string array                        
+                    StreamReader sr = new StreamReader(e.FullPath);
+                    FwVersionELS61TLinux = sr.ReadLine().Trim();
+                    sr.Close();
+
+                    LogFile.WriteMessageToLogFile("Actual firmwareversion which should be installed on ELS61T (Linux) modems: ({0})", FwVersionELS61TLinux);
+                }
+                catch (Exception excp)
+                {
+                    LogFile.WriteErrorToLogFile("Exception ({0}) while trying to access firmware version file", excp.Message);
+                }
+            }
         }
 
         private void FsWatcher_Changed(object sender, System.IO.FileSystemEventArgs e)
@@ -547,7 +595,8 @@ namespace ConnectionService
         {
             try
             {
-                MailjetClient client = new MailjetClient("c0719838f86777631495b01e3d9fb47f", "83cfc1e5f8c84cb2a549f2e9c386c3fc");
+//                MailjetClient client = new MailjetClient("c0719838f86777631495b01e3d9fb47f", "83cfc1e5f8c84cb2a549f2e9c386c3fc");
+                MailjetClient client = new MailjetClient("c0719838f86777631495b01e3d9fb47f", "0a954c0f68efe6762fd5f2a0341965f8");
                 JArray jRecepients = new JArray();
 
                 for (int i = 0; i < recipients.Count; i++)
@@ -718,6 +767,8 @@ namespace ConnectionService
         {
             get { return _data_access; }
         }
+
+        public string FwVersionELS61TLinux { get => _fwVersionELS61TLinux; set => _fwVersionELS61TLinux = value; }
 
         /// <summary>
         /// Remove given client connection
@@ -903,7 +954,7 @@ namespace ConnectionService
                                         ContainerParamsDto contParams = (ContainerParamsDto)ConnectionControl.SkpApiClient.GetContainerParams(iccId);
                                         bIsInFalconic = true;
                                     }
-                                    catch (Exception excp)
+                                    catch (Exception)
                                     {
 //                                        LogFile.WriteErrorToLogFile("{0} Exception ({1}) while tring to ...", this.ToString(), excp.Message);
 //                                        LogFile.WriteMessageToLogFile("{0}", excp.StackTrace);
@@ -1824,7 +1875,15 @@ namespace ConnectionService
 
         private bool analyseStatus(string frame)
         {
-            
+            try
+            {
+                ConnectionControl.SkpApiClient.UpdateContainerLastCommunication(_container.ContainerId, new UpdateLastCommunication(DateTime.Now));
+            }
+            catch (Exception excp)
+            {
+                LogFile.WriteErrorToLogFile("Exception: {0} while trying to store last communication date", excp.Message);
+            }
+
             try
             {
                 string[] toks = frame.Split(new char[] { '=', ',' });
@@ -1862,7 +1921,7 @@ namespace ConnectionService
                             _container.ReadPointer = Convert.ToInt32(toks[5]);
 
                             // network info since firmware version 1.2.00
-                            if (toks.GetLength(0) > 8)
+                            if (toks.GetLength(0) > 10)
                             {
                                 try
                                 {
@@ -2063,7 +2122,7 @@ namespace ConnectionService
                         int code = Convert.ToInt32(toks[6]);
                         int duration = Convert.ToInt32(toks[7]);
                         int amount = Convert.ToInt32(toks[8]);
-                        decimal positiveCreditBalance = Convert.ToDecimal(toks[9]) / 100;
+                        double positiveCreditBalance = Convert.ToDouble(toks[9]) / 100;
                         int weight = Convert.ToInt32(toks[10]);
                         String alibiStorageNumber = "";
                         String cardType = "";
@@ -2091,7 +2150,9 @@ namespace ConnectionService
                             LogFile.WriteErrorToLogFile("{0} Exception: {1} while trying to get translation for code: {2}, language code: {3}", this.Name, excp.Message, code, _container.OperatorLanguage);
                         }
 
-                        if (code == 1 || code == 4)
+                        string uuid = cardType + cardSerialNumber;
+
+                        if (uuid != "")
                         {
                             int cusNumber = 0;
                             try
@@ -2104,15 +2165,9 @@ namespace ConnectionService
                             {
                                 try
                                 {
-                                    double chargedAmount = 0.0F;
-                                    double currentBalance = 0.0F;
-                                    double weightInKilo = 0.0F;
-
-                                    string uuid = cardType + cardSerialNumber;
-
                                     CreateInsertionTransactionByCardUuid trans = new CreateInsertionTransactionByCardUuid(alibiStorageNumber, uuid, 
-                                        chargedAmount, _container.ContainerId, currentBalance, duration, _location.LocationId, null, _container.OperatorId,
-                                        code, date.ToUniversalTime(), weightInKilo);
+                                        _container.ContainerId, positiveCreditBalance, duration, _location.LocationId, _container.OperatorId,
+                                        code, date.ToUniversalTime(), null);
 
                                     LogFile.WriteMessageToLogFile("{0} Store transaction for customer: {1}, duration: {2}", this.Name, trans.CardUuid, trans.DurationInSeconds);
                                     ConnectionControl.SkpApiClient.CreateInsertionByCardUuid(trans);
@@ -2126,14 +2181,11 @@ namespace ConnectionService
                             {
                                 try
                                 {
-                                    double chargedAmount = 0.0F;
                                     double currentBalance = 0.0F;
                                     double weightInKilo = 0.0F;
 
-                                    string uuid = cardType + cardSerialNumber;
-
                                     CreateInsertionTransactionByCustomerNumber trans = new CreateInsertionTransactionByCustomerNumber(alibiStorageNumber, cardSerialNumber,
-                                        chargedAmount, _container.ContainerId, currentBalance, cusNumber, duration, _location.LocationId, null, _container.OperatorId,
+                                        _container.ContainerId, currentBalance, cusNumber, duration, _location.LocationId, _container.OperatorId,
                                         code, date.ToUniversalTime(), weightInKilo);
 
                                     ConnectionControl.SkpApiClient.CreateInsertionByCustomerNumber(trans);
@@ -2149,6 +2201,14 @@ namespace ConnectionService
                         {
                             if (_container.OperatorId == 10008) // no power on messages to wong fong
                                 continue;
+                        }
+                        else if (code == 42)
+                        {
+                            // Fillinglevel is only transmitted on new connection
+                            // when permant online is selected (customer card reader)
+                            // we have to handle actual fillinglevel with message
+                            // FILLING_LEVEL_CHANGED
+                            _container.ActualFillingLevel += 5;
                         }
                         else if (code == 2727) // Geodata changed
                         {
@@ -2174,11 +2234,10 @@ namespace ConnectionService
                             continue;
                         }
 
-                        bool bIncludedInTransaction = false;
                         bool bShouldNotfiyUser = true;
                         bool bStoreInHistory = true;
 
-                        statusMsgList.Add(new StatusMessageDto(code, _container.ActualFillingLevel, bIncludedInTransaction, bShouldNotfiyUser, bStoreInHistory, date.ToUniversalTime()));
+                        statusMsgList.Add(new StatusMessageDto(code, _container.ActualFillingLevel, bShouldNotfiyUser, bStoreInHistory, date.ToUniversalTime()));
 
                         String smsMessage = "\nIdent Nr.: " + _container.IdentString + "\n";
                         smsMessage += message + "\n";
@@ -2236,11 +2295,10 @@ namespace ConnectionService
 
                         LogFile.WriteMessageToLogFile("Event with type: {0} and time: {1}", type, time);
 
-                        bool bIncludedInTransaction = false;
                         bool bShouldNotfiyUser = true;
                         bool bStoreInHistory = true;
 
-                        statusMsgList.Add(new StatusMessageDto(code, _container.ActualFillingLevel, bIncludedInTransaction, bShouldNotfiyUser, bStoreInHistory, date.ToUniversalTime()));
+                        statusMsgList.Add(new StatusMessageDto(code, _container.ActualFillingLevel, bShouldNotfiyUser, bStoreInHistory, date.ToUniversalTime()));
 
                         string message = Controller.GetTranslation("Message", _container.OperatorLanguage);
                         message += ": ";
@@ -3196,8 +3254,6 @@ namespace ConnectionService
                         case _CLIENT_STATE.WAIT_CONFIG_ACK:
                             if (_receivedFrames.Count > 0 && (str = getFrame("%STAT")) != "")
                             {
-//                                LogFile.WriteMessageToLogFile("{0} Acknowledge configuration received", Name);
-
                                 if (analyseStatus(str))
                                 {
                                     if (_container.NumberOfStoredEvents == 0)
@@ -3302,7 +3358,9 @@ namespace ConnectionService
                                 if (_container.WritePointer == _container.ReadPointer)
                                 {
                                     if (_container.IsIdentSystemEquipped)
+                                    {
                                         state = _CLIENT_STATE.ONLINE;
+                                    }
                                     else
                                         state = _CLIENT_STATE.STOP;
                                 }
@@ -3332,6 +3390,16 @@ namespace ConnectionService
                                 // or status reports
                                 if ((str = getFrame("%EVT=")) != "")
                                     ReadEvents(str);
+
+                                // update last communication here
+                                try
+                                {
+                                    ConnectionControl.SkpApiClient.UpdateContainerLastCommunication(_container.ContainerId, new UpdateLastCommunication(DateTime.Now));
+                                }
+                                catch (Exception excp)
+                                {
+                                    LogFile.WriteErrorToLogFile("Exception: {0} while trying to store last communication date", excp.Message);
+                                }
                             }
                             else if (DateTime.Now > _tLastCommandToEco.AddMinutes(3))
                             {
