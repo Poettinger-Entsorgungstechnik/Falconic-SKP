@@ -1846,6 +1846,10 @@ namespace SKP
                             customer._b_location_group_changed = true;                            
                             return true;
                         }
+                        else if (_location_group_id != customer._location_group_id)
+                        {
+
+                        }
 
                         if (!_controller.DataAccess.GetLocationLanguageId(language_code, ref language_id))
                         {

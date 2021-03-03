@@ -1431,6 +1431,8 @@ namespace ConnectionService
         [NonSerialized]
         string _cellInfoLastCycle = "";
 
+        private bool _bPermantOnline = false;
+
 #endregion
 
         #region Overrides
@@ -1987,6 +1989,15 @@ namespace ConnectionService
 
                                         LogFile.WriteMessageToLogFile("{0} - SSC with firmware version: {1}", this.Name, _container.ModemFirmwareVersion);
                                     }
+                                    else if (_container.ModemFirmwareVersion.IndexOf("3RD-") != -1)
+                                    {
+                                        ft = FirmwareType.ThirdPartyProduct;
+                                        int pos1 = _container.ModemFirmwareVersion.LastIndexOf("-");
+                                        if (pos1 != -1)
+                                            _container.ModemFirmwareVersion = _container.ModemFirmwareVersion.Substring(pos1 + 1);
+
+                                        LogFile.WriteMessageToLogFile("{0} - 3rd Party product with firmware version: {1}", this.Name, _container.ModemFirmwareVersion);
+                                    }
 
                                     StoreContainerHardwareInformation info = new StoreContainerHardwareInformation(networkInfo, ft, _container.ModemFirmwareVersion, _container.ModemSignalQuality,
                                         numberOfStartings, minutesOfOperation, DateTime.Now);
@@ -2202,13 +2213,14 @@ namespace ConnectionService
                             if (_container.OperatorId == 10008) // no power on messages to wong fong
                                 continue;
                         }
-                        else if (code == 42)
+                        else if (code == 42 && _bPermantOnline)    // actual fillinglevel changed
                         {
                             // Fillinglevel is only transmitted on new connection
                             // when permant online is selected (customer card reader)
                             // we have to handle actual fillinglevel with message
                             // FILLING_LEVEL_CHANGED
                             _container.ActualFillingLevel += 5;
+                            LogFile.WriteMessageToLogFile("{0} Increased actual filling level to: {1}", this.Name, _container.ActualFillingLevel);
                         }
                         else if (code == 2727) // Geodata changed
                         {
@@ -3298,7 +3310,10 @@ namespace ConnectionService
                                 else
                                 {
                                     if (_container.IsIdentSystemEquipped)
+                                    {
                                         state = _CLIENT_STATE.ONLINE;
+                                        _bPermantOnline = true;
+                                    }
                                     else
                                         state = _CLIENT_STATE.STOP;
                                 }
@@ -3360,6 +3375,7 @@ namespace ConnectionService
                                     if (_container.IsIdentSystemEquipped)
                                     {
                                         state = _CLIENT_STATE.ONLINE;
+                                        _bPermantOnline = true;
                                     }
                                     else
                                         state = _CLIENT_STATE.STOP;

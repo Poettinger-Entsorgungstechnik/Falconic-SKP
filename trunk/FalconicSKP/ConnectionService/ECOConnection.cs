@@ -946,6 +946,9 @@ namespace ECO
 
                             LogFile.WriteMessageToLogFile("{0} Customeraccess on location: {1}, PricePerHundredKilos: {2}, Credit: {3}", this.Name, _locationParams.LocationId, pricePerOneHundredKilo, currentBalance);
 
+                            // card is accepted so send locationgroup mask with all bits set
+                            card.LocationGroupMask = 255;
+
                             string command = String.Format("#CUS={0:D8},{1:D3},{2:D8},{3:D5},{4},{5:D1},{6:D7},{7:D7},{8:D4},{9:D4},{10:D20}",
                                 card.CustomerNumber, card.ReleaseNumber, card.LocationGroupMask, card.MinimumAmount,
                                 card.ReleaseDate.ToString("ddMMyyyy"), (int)card.CardChargingType, currentBalance, pricePerOneHundredKilo,
