@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<configuration>
+  <plugin>
+    <NAME>Brixen</NAME>
+    <OPERATOR_ID>15</OPERATOR_ID>
+    <EXPORT_FORMAT>.csv</EXPORT_FORMAT>
+  </plugin>
+  <plugin>
+    <NAME>Recheio</NAME>
+    <OPERATOR_ID>274</OPERATOR_ID>
+    <EXPORT_FORMAT>.csv</EXPORT_FORMAT>
+  </plugin>
+</configuration>

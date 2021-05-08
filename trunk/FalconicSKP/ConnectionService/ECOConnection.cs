@@ -372,7 +372,7 @@ namespace ECO
         [NonSerialized]
         DateTime _destTime;
         [NonSerialized]
-        int _keepAliveInterval = 3;
+        int _keepAliveInterval = 3 * 60; // [secs]
 
         #endregion
 
@@ -967,11 +967,52 @@ namespace ECO
                     else
                     {
                         LogFile.WriteMessageToLogFile("{0} Card not accepted, reason: {1}", this.Name, cardInfo.CardAccess);
-                        // try to remove customer from whitelist in modem if it is a myfare card
-                        if (card.CustomerNumber == 0)
+
+                        if (cardInfo.CardAccess == CardAccessResult.CustomerHasNotEnoughBalance)
                         {
-                            string uuid = card.CardType + card.CardSerialNumber;
-                            SendCommand(String.Format("-CUS={0}", uuid));
+                            UInt32 pricePerOneHundredKilo = 0;
+
+                            if (_locationParams.PricePerOneHundredKilo.HasValue)
+                                pricePerOneHundredKilo = (UInt32)_locationParams.PricePerOneHundredKilo;
+                            else
+                                LogFile.WriteMessageToLogFile("{0} - Warning! Location: {1} has no price per hundred kilos!", this.Name, _locationParams.LocationId);
+
+                            string command = String.Format("#CUS={0:D8},{1:D3},{2:D8},{3:D5},{4},{5:D1},{6:D7},{7:D7},{8:D4},{9:D4},{10:D20}",
+                                card.CustomerNumber, card.ReleaseNumber, card.LocationGroupMask, card.MinimumAmount,
+                                card.ReleaseDate.ToString("ddMMyyyy"), (int)card.CardChargingType, 0, pricePerOneHundredKilo,
+                                cardInfo.LanguageId, card.CardType, card.CardSerialNumberUntrimmed);
+
+                            SendCommand(command);
+                        }
+                        else
+                        {
+                            // try to remove customer from whitelist in modem if it is a myfare card
+                            if (card.CustomerNumber == 0)
+                            {
+                                string uuid = card.CardType + card.CardSerialNumber;
+                                SendCommand(String.Format("-CUS={0}", uuid));
+                            }
+                            else
+                            {
+                                UInt32 currentBalance = 0;
+                                UInt32 pricePerOneHundredKilo = 0;
+
+                                if (cardInfo.CurrentBalance.HasValue)
+                                    currentBalance = (UInt32)cardInfo.CurrentBalance;
+
+                                if (_locationParams.PricePerOneHundredKilo.HasValue)
+                                    pricePerOneHundredKilo = (UInt32)_locationParams.PricePerOneHundredKilo;
+                                else
+                                    LogFile.WriteMessageToLogFile("{0} - Warning! Location: {1} has no price per hundred kilos!", this.Name, _locationParams.LocationId);
+
+                                // hitag -> send #CUS with LocationGroupMask = 0
+                                string command = String.Format("#CUS={0:D8},{1:D3},{2:D8},{3:D5},{4},{5:D1},{6:D7},{7:D7},{8:D4},{9:D4},{10:D20}",
+                                    card.CustomerNumber, card.ReleaseNumber, 0, card.MinimumAmount,
+                                    card.ReleaseDate.ToString("ddMMyyyy"), (int)card.CardChargingType, currentBalance, pricePerOneHundredKilo,
+                                    cardInfo.LanguageId, card.CardType, card.CardSerialNumberUntrimmed);
+
+                                SendCommand(command);
+                            }
                         }
                     }
                 }
@@ -1190,8 +1231,9 @@ namespace ECO
                         this._container_id = _containerParams.Id;
 
                         string new_name = String.Format("ContainerID {0}:", this._container_id);
+                        _keepAliveInterval = Controller.GetKeepAliveInterval(_container_id);
 
-                        LogFile.WriteMessageToLogFile("{0} Ident: {1}", new_name, fullString);
+                        LogFile.WriteMessageToLogFile("{0} Ident: {1}, Keepalive: {2} secs", new_name, fullString, _keepAliveInterval);
 
                         lock (_controller.ConnectedECOClients.SyncRoot)
                         {
@@ -2481,31 +2523,12 @@ namespace ECO
                             break;
 
                         case _CLIENT_STATE.IDLE:
-                            TimeSpan ts = new TimeSpan(0, _keepAliveInterval, 0);
+                            TimeSpan ts = TimeSpan.FromSeconds(_keepAliveInterval);
 
                             if (_tLastWritePointerQuery.Add(ts) < DateTime.Now)
                             {
                                 SendCommand("#WRP?");
                                 state = _CLIENT_STATE.WAIT_WRITEPOINTER;
-                                // read new keep alive interval if we want to change it for a specific container
-                                if (this.ContainerID == 415 || this.ContainerID == 434 || this.ContainerID == 23) // || this.ContainerID == 78 || this.ContainerID == 80 || this.ContainerID == 98)
-                                {
-                                    if (File.Exists("c:\\tmp\\interval.txt"))
-                                    {
-                                        try
-                                        {
-                                            StreamReader sr = File.OpenText("c:\\tmp\\interval.txt");
-
-                                            string line = sr.ReadLine();
-                                            _keepAliveInterval = Convert.ToInt32(line.Trim(new char[] { ' ', '\r', '\n', '\t' }));
-                                            sr.Close();
-                                        }
-                                        catch (Exception excp)
-                                        {
-                                            LogFile.WriteErrorToLogFile("{0} Exception ({1}) while trying to load interval.txt occured", this.Name, excp.Message);
-                                        }
-                                    }
-                                }
                                 break;
                             }
 
@@ -2690,7 +2713,7 @@ namespace ECO
                     {
                         offset = 0;
                     }
-                    else if (DateTime.Now > _tLastCommandFromEco.Add(new TimeSpan(0, _keepAliveInterval + 2, 0)))
+                    else if (DateTime.Now > _tLastCommandFromEco.Add(TimeSpan.FromSeconds(_keepAliveInterval + 120)))
                     {
                         LogFile.WriteMessageToLogFile("{0} End Client connection due to timeout", this.Name);
                         Stop();

@@ -267,7 +267,7 @@ namespace SKP
 
         private class ServiceCommand
         {
-            #region Members
+#region Members
 
             public uint command;    // 0001 PLC-Coldstart
                                     // 0002 PLC-Warmstart
@@ -276,7 +276,7 @@ namespace SKP
             public uint delay_time; // time to wait till command should be executed
             public string reserved; // reserved
 
-            #endregion
+#endregion
         }
 
 #endregion
@@ -344,7 +344,6 @@ namespace SKP
         private Queue _fromEco = new Queue();
         private Queue _serviceCommands = new Queue();                       // queue for service commands
         private bool _bIsTestClient = false;
-        private UInt32 _actualFileBlock = 0;
 
         [NonSerialized] 
         private TcpClient _tcpClient;                       // tcp client class
@@ -381,7 +380,7 @@ namespace SKP
         [NonSerialized]
         DateTime _destTime;
         [NonSerialized]
-        int _keepAliveInterval = 3 * 60; // [secs]
+        int _keepAliveInterval = 3;
 
 #endregion
 
@@ -1342,6 +1341,7 @@ namespace SKP
             {
                 String fullString = gsm_number = gsm_number.Substring(5);
                 int posComma = 0;
+                // if we have a modem which sends it's softwareversion -> remove it
                 if ((posComma = gsm_number.IndexOf(',')) != -1)
                 {
                     try
@@ -1349,8 +1349,6 @@ namespace SKP
                         string[] toks = gsm_number.Split(new char[] { ',' });
                         if (toks.GetLength(0) >= 2)
                         {
-                            // for example: ECO-ELS61T-Linux-1.2.008 or: ECO-ELS61T-Java-11.0.12
-                            // 
                             _client.ModemFirmwareVersion = toks[1].Trim();
                             _client.ModemSignalQuality = System.Convert.ToUInt16(toks[2].Trim());
                         }
@@ -1391,9 +1389,7 @@ namespace SKP
                     {
                         string new_name = String.Format("ContainerID {0}:", this._container_id);
 
-                        _keepAliveInterval = Controller.GetKeepAliveInterval(_container_id);
-
-                        LogFile.WriteMessageToLogFile("{0} Ident: {1}, Keepalive: {2} secs", new_name, fullString, _keepAliveInterval);
+                        LogFile.WriteMessageToLogFile("{0} Ident: {1}", new_name, fullString);
 
                         // remove any possible zombie clients with the same name
                         if (this._container_id != 22)
@@ -1413,43 +1409,6 @@ namespace SKP
                         }
 
                         this.Name = new_name;
-                        int pos = 0;
-
-                        if ((pos = _client.ModemFirmwareVersion.IndexOf("ECO-ELS61T-Linux")) != -1)
-                        {
-                            try
-                            {
-                                string strVersion = _client.ModemFirmwareVersion.Substring(pos + 17);
-
-                                int major = 0;
-                                int minor = 0;
-                                int build = 0;
-
-                                string[] toks1 = strVersion.Split(new char[] { '.' });
-
-                                major = Convert.ToInt32(toks1[0]);
-                                minor = Convert.ToInt32(toks1[1]);
-                                build = Convert.ToInt32(toks1[2]);
-
-                                if (major >= 1 && minor >= 2 && build >= 12)
-                                {
-                                    if (strVersion != Controller.FwVersionELS61TLinux)
-                                    {
-                                        LogFile.WriteMessageToLogFile("{0} Firmware on modem is not up2date! Should be: {1}", this.Name, Controller.FwVersionELS61TLinux);
-                                        DoModemFirmwareUpdate(_client.ModemFirmwareVersion);
-                                    }
-                                    else
-                                    {
-                                        LogFile.WriteMessageToLogFile("{0} Firmware on modem is up2date! ({1})", this.Name, Controller.FwVersionELS61TLinux);
-                                    }
-                                }
-                            }
-                            catch (Exception excp)
-                            {
-                                LogFile.WriteErrorToLogFile("{0} Exception: {1} while trying to parse firmware string!", this.Name, excp.Message);
-                            }
-                        }
-
                         break;
                     }
 
@@ -1848,10 +1807,6 @@ namespace SKP
                             customer._b_location_group_changed = true;                            
                             return true;
                         }
-                        else if (_location_group_id != customer._location_group_id)
-                        {
-
-                        }
 
                         if (!_controller.DataAccess.GetLocationLanguageId(language_code, ref language_id))
                         {
@@ -1970,63 +1925,6 @@ namespace SKP
 
         #region Protocol methods
 
-        private bool DoModemFirmwareUpdate(string strVersion)
-        {
-            string path = "C:\\SKP\\Firmware\\";
-
-            if (strVersion.IndexOf("ECO-ELS61T-Linux") != -1)
-            {
-                path += "ECO-ELS61T-Linux\\ELS61-";
-                path += Controller.FwVersionELS61TLinux;
-                path += ".tgz";
-
-                FileInfo fileInfo = new FileInfo(path);
-
-                SendStartFileTransferCommand("/usr/local/ELS61.tgz", (uint)fileInfo.Length);
-
-                try
-                {
-                    FileStream stream = new FileStream(path, FileMode.Open, FileAccess.Read);
-                    byte[] block = new byte[1024];
-                    int numbytesRead = 0;
-                    string answer = "";
-                    while ((numbytesRead = stream.Read(block, 0, 1024)) > 0)
-                    {
-                        answer = "";
-                        SendFileBlockCommand(block, (uint)numbytesRead);
-
-                        // wait for answer
-                        for (int i = 0; i < 5; i++)
-                        {
-                            _receivedEvent.WaitOne(1000);
-                            if (_fromEco.Count > 0)
-                            {
-                                lock (_fromEco.SyncRoot)
-                                {
-                                    answer = (string)_fromEco.Dequeue();
-                                }
-                                break;
-                            }
-                        }
-
-                        if (answer.IndexOf("%OK") == -1)
-                        {
-                            LogFile.WriteMessageToLogFile("{0} - Wrong answer: ({1}) received - stop here!", this.Name, answer);
-                            return false;
-                        }
-                    }
-
-                    return true;
-                }
-                catch (Exception excp)
-                {
-                    LogFile.WriteErrorToLogFile("{0} Exception ({1}) while trying to transfer firmwarefile to modem", this.Name, excp.Message);
-                }
-            }
-
-            return false;
-        }
-
         /// <summary>
         /// send quit connection command
         /// </summary>
@@ -2052,108 +1950,6 @@ namespace SKP
             catch (Exception excp)
             {
                 LogFile.WriteErrorToLogFile("{0} Exception: {1} in function SendQuitCommand.", this.Name, excp.Message);
-                return false;
-            }
-
-            return true;
-        }
-
-        private bool SendStartFileTransferCommand(string strPath, UInt32 fileSize)
-        {
-            try
-            {
-                Int32 filePathLength = strPath.Length;
-                byte chk = 0;
-                byte[] send_data = new byte[filePathLength + 10];
-
-                send_data[0] = 0x02;    // STX
-                send_data[1] = 0x50;    // Start file transfer
-                send_data[2] = (byte)((fileSize & 0xff000000) >> 24);
-                send_data[3] = (byte)((fileSize & 0x00ff0000) >> 16);
-                send_data[4] = (byte)((fileSize & 0x0000ff00) >> 8);
-                send_data[5] = (byte)((fileSize & 0x000000ff));
-                send_data[6] = (byte)((filePathLength & 0xff00) >> 8);
-                send_data[7] = (byte)((filePathLength & 0x00ff));
-
-                Array.Copy(Encoding.ASCII.GetBytes(strPath), 0, send_data, 8, filePathLength);
-
-                for (int i = 0; i < filePathLength + 8; i++)
-                    chk += send_data[i];
-
-                send_data[filePathLength + 8] = chk;
-                send_data[filePathLength + 9] = 0x03;   // ETX
-
-                _tcpClient.Client.Send(send_data);
-                _tLastCommandToEco = DateTime.Now;
-
-                if (_bLogDetails) LogFile.WriteMessageToLogFile("{0} StartFileTransfer to: {1}", this.Name, strPath);
-
-                _actualFileBlock = 0;
-            }
-            catch (Exception excp)
-            {
-                LogFile.WriteErrorToLogFile("{0} Exception: {1} in function SendStartFileTransferCommand.", this.Name, excp.Message);
-                return false;
-            }
-
-            return true;
-        }
-
-        private bool SendFileBlockCommand(byte[] block, UInt32 blockSize)
-        {
-            try
-            {
-                byte chk = 0;
-                byte[] send_data = new byte[blockSize + 6];
-
-                send_data[0] = 0x02;    // STX
-                send_data[1] = 0x51;    // Upload file block
-                send_data[2] = (byte)((blockSize & 0xff00) >> 8);
-                send_data[3] = (byte)((blockSize & 0x00ff));
-
-                Array.Copy(block, 0, send_data, 4, blockSize);
-
-                for (int i = 0; i < blockSize + 4; i++)
-                    chk += send_data[i];
-
-                send_data[blockSize + 4] = chk;
-                send_data[blockSize + 5] = 0x03;   // ETX
-
-                _tcpClient.Client.Send(send_data);
-                _tLastCommandToEco = DateTime.Now;
-
-                if (_bLogDetails) LogFile.WriteMessageToLogFile("{0} Upload block: {1}", this.Name, _actualFileBlock++);
-            }
-            catch (Exception excp)
-            {
-                LogFile.WriteErrorToLogFile("{0} Exception: {1} in function SendFileBlockCommand.", this.Name, excp.Message);
-                return false;
-            }
-
-            return true;
-        }
-
-        private bool SendFileInstallCommand()
-        {
-            try
-            {
-                byte[] send_data = new byte[6];
-
-                send_data[0] = 0x02;    // STX
-                send_data[1] = 0x52;    // Install file
-                send_data[2] = 0;
-                send_data[3] = 0;
-                send_data[4] = 0;
-                send_data[5] = 0x03;   // ETX
-
-                _tcpClient.Client.Send(send_data);
-                _tLastCommandToEco = DateTime.Now;
-
-                if (_bLogDetails) LogFile.WriteMessageToLogFile("{0} Send File install command", this.Name);
-            }
-            catch (Exception excp)
-            {
-                LogFile.WriteErrorToLogFile("{0} Exception: {1} in function SendFileInstallCommand.", this.Name, excp.Message);
                 return false;
             }
 
@@ -3161,12 +2957,31 @@ namespace SKP
                             break;
 
                         case _CLIENT_STATE.IDLE:
-                            TimeSpan ts = TimeSpan.FromSeconds(_keepAliveInterval);
+                            TimeSpan ts = new TimeSpan(0, _keepAliveInterval, 0);
 
                             if (!_bIsINAConnection && _tLastWritePointerQuery.Add(ts) < DateTime.Now)
                             {
                                 SendCommand("#WRP?");
                                 state = _CLIENT_STATE.WAIT_WRITEPOINTER;
+                                // read new keep alive interval if we want to change it for a specific container
+                                if (this.ContainerID == 415 || this.ContainerID == 434 || this.ContainerID == 23) // || this.ContainerID == 78 || this.ContainerID == 80 || this.ContainerID == 98)
+                                {
+                                    if (File.Exists("c:\\tmp\\interval.txt"))
+                                    {
+                                        try
+                                        {
+                                            StreamReader sr = File.OpenText("c:\\tmp\\interval.txt");
+
+                                            string line = sr.ReadLine();
+                                            _keepAliveInterval = Convert.ToInt32(line.Trim(new char[] { ' ', '\r', '\n', '\t' }));
+                                            sr.Close();
+                                        }
+                                        catch (Exception excp)
+                                        {
+                                            LogFile.WriteErrorToLogFile("{0} Exception ({1}) while trying to load interval.txt occured", this.Name, excp.Message);
+                                        }
+                                    }
+                                }
                                 break;
                             }
 
@@ -3383,7 +3198,7 @@ namespace SKP
                     {
                         offset = 0;
                     }
-                    else if (DateTime.Now > _tLastCommandFromEco.Add(TimeSpan.FromSeconds(_keepAliveInterval + 120)))
+                    else if (DateTime.Now > _tLastCommandFromEco.Add(new TimeSpan(0, _keepAliveInterval + 2, 0)))
                     {
                         LogFile.WriteMessageToLogFile("{0} End Client connection due to timeout", this.Name);
                         Stop();
@@ -3400,7 +3215,6 @@ namespace SKP
             }
             catch (Exception excp)
             {
-                string msg = excp.Message;
 //                LogFile.WriteErrorToLogFile("{0} Exception ({1}) in !!Receive!! occured", this.Name, excp.Message);
             }
 

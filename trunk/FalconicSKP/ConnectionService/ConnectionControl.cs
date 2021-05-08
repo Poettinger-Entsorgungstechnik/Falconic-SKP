@@ -108,6 +108,11 @@ namespace ConnectionService
             public SKP.CustomerImportExport.DataImportExport client;
         }
 
+        class ContainerSettings
+        {
+            public int keepAliveInterval;
+        }
+
         #endregion
 
         #region constants
@@ -141,17 +146,20 @@ namespace ConnectionService
         private ArrayList _ECOClients = new ArrayList(100);	        // list of actual connected clients, allow 100 clients as default, can be increased
         private ArrayList _SMSClients = new ArrayList(100);         // list of actual connected clients, allow 100 clients as default, can be increased
         private ArrayList _imexport = new ArrayList();
+        private Hashtable _containerSettingsOverride = new Hashtable();
 
         private Mutex _emailMutex = new Mutex();
         private DateTime _tLastLocationCheck = DateTime.Now.Subtract(new TimeSpan(0,1,0,0,0));
         private Hashtable _lastMonitoringMessage = new Hashtable();
         private FileSystemWatcher _fsWatcher = new FileSystemWatcher();
         private FileSystemWatcher _fsWatcherFirmwareELS61TLinux = new FileSystemWatcher();
+        private FileSystemWatcher _fsWatcherContainerSettingsOverride = new FileSystemWatcher();
 
         private String _fwVersionELS61TLinux;
 
         private Dictionary<int, Location> _2DotZero_Containers = new Dictionary<int, Location>();
         private Mutex _2DotZeroContainerMutex = new Mutex();
+        private Mutex _ContainerSettingsOverridMutex = new Mutex();
 
         private DateTime _lastTimeFsWatcherCalled;
         private Dictionary<string, Dictionary<string, string>> _lngDictionary = new Dictionary<string, Dictionary<string, string>>();
@@ -388,6 +396,22 @@ namespace ConnectionService
                 LogFile.WriteErrorToLogFile("{0}", excp.StackTrace);
             }
 
+            try
+            {
+                _fsWatcherContainerSettingsOverride.Path = "C:\\SKP\\";
+                _fsWatcherContainerSettingsOverride.NotifyFilter = NotifyFilters.LastWrite;
+                _fsWatcherContainerSettingsOverride.Filter = "*.txt";
+                _fsWatcherContainerSettingsOverride.Changed += _fsWatcherContainerSettingsOverride_Changed;
+                _fsWatcherContainerSettingsOverride.EnableRaisingEvents = true;
+                // read file
+                _fsWatcherContainerSettingsOverride_Changed(this, new FileSystemEventArgs(WatcherChangeTypes.Changed, _fsWatcherContainerSettingsOverride.Path, "ContainerSettingsOverride.txt"));
+            }
+            catch (Exception excp)
+            {
+                LogFile.WriteErrorToLogFile("!! Exception: {0} !!", excp.Message);
+                LogFile.WriteErrorToLogFile("{0}", excp.StackTrace);
+            }
+
             /// <summary>
             /// WIP SKP service Methods can be removed after wip is merged to falconic
             /// </summary>
@@ -435,6 +459,64 @@ namespace ConnectionService
             }
 
             LogFile.WriteMessageToLogFile("{0} Startup complete :-)", this.ToString());
+        }
+
+        private void _fsWatcherContainerSettingsOverride_Changed(object sender, FileSystemEventArgs e)
+        {
+            LogFile.WriteMessageToLogFile("ContainerSettingsOverride changed: {0}, {1}, {2}", e.FullPath, e.Name, e.ChangeType);
+
+            if (e.Name == "ContainerSettingsOverride.txt" && e.ChangeType == WatcherChangeTypes.Changed)
+            {
+                // wait a bit till editor closed all resources
+                Thread.Sleep(100);
+
+                _ContainerSettingsOverridMutex.WaitOne();
+                _containerSettingsOverride.Clear();
+
+                try
+                {
+                    // read the whole file into a string array                        
+                    StreamReader sr = new StreamReader(e.FullPath);
+                    string line;
+
+                    while ((line = sr.ReadLine()) != null)
+                    {
+                        try
+                        {
+                            string[] lineToks = line.Split(new char[] { ',' });
+
+                            if (line == "") continue;
+                            if (line.StartsWith("#"))
+                                continue;
+
+                            int containerId = Convert.ToInt32(lineToks[0].Trim());
+                            int keepAliveInterval = Convert.ToInt32(lineToks[1].Trim());
+
+                            ContainerSettings containerSettings = new ContainerSettings();
+                            containerSettings.keepAliveInterval = keepAliveInterval;
+
+                            _containerSettingsOverride[containerId] = containerSettings;
+
+                            LogFile.WriteMessageToLogFile("{0}: Set KeepAliveinterval: {1}", String.Format("ContainerID {0}", containerId), keepAliveInterval);
+
+                        }
+                        catch (Exception excp)
+                        {
+                            LogFile.WriteErrorToLogFile("Exception ({0}) while trying to parse line: ({1})", excp.Message, line);
+                        }
+                    }
+
+                    sr.Close();
+                }
+                catch (Exception excp)
+                {
+                    LogFile.WriteErrorToLogFile("Exception ({0}) while trying to read container settings override", excp.Message);
+                }
+                finally
+                {
+                    _ContainerSettingsOverridMutex.ReleaseMutex();
+                }
+            }
         }
 
         private void _fsWatcherFirmwareELS61TLinux_Changed(object sender, FileSystemEventArgs e)
@@ -587,6 +669,33 @@ namespace ConnectionService
             return retval;
         }
 
+        public int GetKeepAliveInterval(int containerId)
+        {
+            int retval = 3 * 60;
+
+            try
+            {
+                _ContainerSettingsOverridMutex.WaitOne();
+
+                if (_containerSettingsOverride.ContainsKey(containerId))
+                {
+                    ContainerSettings contSettings = (ContainerSettings)_containerSettingsOverride[containerId];
+
+                    retval = contSettings.keepAliveInterval;
+                }
+            }
+            catch (Exception excp)
+            {
+                LogFile.WriteErrorToLogFile("Exception ({0}) while trying to access container settings dictionary", excp.Message);
+            }
+            finally
+            {
+                _ContainerSettingsOverridMutex.ReleaseMutex();
+            }
+
+            return retval;
+        }
+
         #endregion
 
         #region static methods
@@ -596,7 +705,7 @@ namespace ConnectionService
             try
             {
 //                MailjetClient client = new MailjetClient("c0719838f86777631495b01e3d9fb47f", "83cfc1e5f8c84cb2a549f2e9c386c3fc");
-                MailjetClient client = new MailjetClient("c0719838f86777631495b01e3d9fb47f", "0a954c0f68efe6762fd5f2a0341965f8");
+                MailjetClient client = new MailjetClient("c0719838f86777631495b01e3d9fb47f", "50a455c21f8903cb3b0d754e3f44c49c");
                 JArray jRecepients = new JArray();
 
                 for (int i = 0; i < recipients.Count; i++)
@@ -2455,6 +2564,12 @@ namespace ConnectionService
                             try { card.CardSerialNumber = toks[13]; } catch { };
                             card.CardSerialNumberUntrimmed = card.CardSerialNumber;
                             card.CardSerialNumber = TrimCustomerNumber(card.CardSerialNumber.Trim(), dbgName);
+
+                            if ((card.CustomerNumber == 0) && (card.CardType == "") && (card.CardSerialNumber == ""))
+                            {
+                                LogFile.WriteErrorToLogFile("{0} Invalid customer card data!", dbgName);
+                                return false;
+                            }
                         }
                     }
                     catch (Exception excp)
@@ -2940,11 +3055,11 @@ namespace ConnectionService
                             loc.Latitude = (double)location.Latitude;
                             loc.Longitude = (double)location.Longitude;
 //                            loc.IsWatchdogActive = (bool)location.LocationMonitoringActive;
-                            loc.PressStrokes = (int)location.NumberOfPresses;
-                            loc.PressPosition = (bool)location.PressPosition;
-                            loc.MachineUtilization = (int)location.MachineUtilization;
-                            loc.FullErrorLevel = (int)location.PercentFullMessage;
-                            loc.FullWarningLevel = (int)location.PercentPreFullMessage;
+                            loc.PressStrokes = (int)contFeatures.MachineSettings.NumberOfPresses;
+                            loc.PressPosition = (bool)contFeatures.MachineSettings.PressPosition;
+                            loc.MachineUtilization = (int)contFeatures.MachineSettings.MachineUtilization;
+                            loc.FullErrorLevel = (int)contFeatures.MachineSettings.PercentFullMessage;
+                            loc.FullWarningLevel = (int)contFeatures.MachineSettings.PercentPreFullMessage;
                             loc.PreferredFractionId = location.FractionId;
 
                             if (location.NightLockActive)
@@ -3097,6 +3212,15 @@ namespace ConnectionService
                         LogFile.WriteMessageToLogFile("{0} No location found within specified area!", this.Name);
                         ConnectionControl.SkpApiClient.RemoveContainerFromAllLocations(_container.ContainerId);
 
+                        _location.PressStrokes = (int)contFeatures.MachineSettings.NumberOfPresses;
+                        _location.PressPosition = contFeatures.MachineSettings.PressPosition;
+                        _location.FullErrorLevel = contFeatures.MachineSettings.PercentFullMessage;
+                        _location.FullWarningLevel = contFeatures.MachineSettings.PercentPreFullMessage;
+                        _location.MachineUtilization = contFeatures.MachineSettings.MachineUtilization;
+                        _location.IsLiftTiltEquipped = _container.IsLiftTiltEquipped;
+                        _location.IsRetroKitEquipped = _container.IsRetroFit;
+
+#if false
                         if (_container.Is2DotZero)
                         {
                             // try to get standard parameters for container from 2.0 machine configuration database
@@ -3143,6 +3267,7 @@ namespace ConnectionService
                             _location.IsRetroKitEquipped = _container.IsRetroFit;
                             _location.PressPosition = _container.PressPosition;
                         }
+#endif
                     }
 
                     UpdateGeoPosition x = new UpdateGeoPosition(lat, lng);
@@ -3182,7 +3307,7 @@ namespace ConnectionService
 
 #endregion
 
-        #region Thread routines
+#region Thread routines
 
         /// <summary>
         /// SKP connection state machine

@@ -1,0 +1,45 @@
+        private static bool ftp_upload_file(string local_file_name, string server_file_name, string ftp_server, string username, string password)
+        {
+            bool retval = false;
+
+            try
+            {
+                string uri = string.Format("ftp://{0}/{1}", ftp_server, server_file_name);
+
+                // create the ftp request
+                WebRequest request = FtpWebRequest.Create(uri);
+                request.Credentials = new NetworkCredential(username, password);
+                ((FtpWebRequest)request).EnableSsl = true;
+                ServicePointManager.ServerCertificateValidationCallback =
+                  (s, certificate, chain, sslPolicyErrors) => true;
+
+                // state that we uploading the file
+                request.Method = WebRequestMethods.Ftp.UploadFile;
+                request.Timeout = 600000;
+                ((FtpWebRequest)request).KeepAlive = false;
+
+                using (Stream ftpStream = request.GetRequestStream())
+                using (Stream fileStream = new System.IO.FileStream(local_file_name, System.IO.FileMode.Open))
+                {
+                    fileStream.CopyTo(ftpStream);
+                }
+
+                FtpWebResponse response = (FtpWebResponse)request.GetResponse();
+                if (response.StatusCode == FtpStatusCode.ClosingData)
+                {
+                    retval = true;
+                    Console.WriteLine("{0}: Ftp upload of file: {1} was ok.", 15, server_file_name);
+                }
+                else
+                    Console.WriteLine("{0}: Ftp upload error. Status: {1}", 15, response.StatusDescription);
+
+                response.Close();
+
+            }
+            catch (Exception excp)
+            {
+                Console.WriteLine("{0}: Exception {1} while trying to upload file!", 15, excp.Message);
+            }
+
+            return retval;
+        }

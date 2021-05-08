@@ -1,0 +1,2144 @@
+﻿{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Falconic-SKP v1.0",
+    "description": "Build version: 1.0.0.0.Sha.local",
+    "version": "v1.0"
+  },
+  "paths": {
+    "/v1.0/Container/{simCardNumber}": {
+      "get": {
+        "tags": [
+          "Container"
+        ],
+        "operationId": "GetContainerParams",
+        "parameters": [
+          {
+            "name": "simCardNumber",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContainerParamsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1.0/Container/{containerId}/machineData": {
+      "get": {
+        "tags": [
+          "Container"
+        ],
+        "operationId": "GetContainerMachineData",
+        "parameters": [
+          {
+            "name": "containerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkpContainerFeaturesDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1.0/Container/{containerId}/lastCommunication": {
+      "get": {
+        "tags": [
+          "Container"
+        ],
+        "operationId": "GetContainerLastCommunication",
+        "parameters": [
+          {
+            "name": "containerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LastCommunicationResult"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Container"
+        ],
+        "operationId": "UpdateContainerLastCommunication",
+        "parameters": [
+          {
+            "name": "containerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateLastCommunication"
+                  }
+                ]
+              }
+            },
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateLastCommunication"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateLastCommunication"
+                  }
+                ]
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateLastCommunication"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1.0/Container/{containerId}/readWritePointer": {
+      "post": {
+        "tags": [
+          "Container"
+        ],
+        "operationId": "UpdateReadWritePointer",
+        "parameters": [
+          {
+            "name": "containerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateReadWritePointer"
+                  }
+                ]
+              }
+            },
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateReadWritePointer"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateReadWritePointer"
+                  }
+                ]
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateReadWritePointer"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1.0/Container/{containerId}/geoPosition": {
+      "post": {
+        "tags": [
+          "Container"
+        ],
+        "operationId": "UpdateContainerGeoPosition",
+        "parameters": [
+          {
+            "name": "containerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateGeoPosition"
+                  }
+                ]
+              }
+            },
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateGeoPosition"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateGeoPosition"
+                  }
+                ]
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateGeoPosition"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1.0/Container/{containerId}/status": {
+      "post": {
+        "tags": [
+          "Container"
+        ],
+        "operationId": "StoreContainerStatus",
+        "parameters": [
+          {
+            "name": "containerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/StoreContainerStatus"
+                  }
+                ]
+              }
+            },
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/StoreContainerStatus"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/StoreContainerStatus"
+                  }
+                ]
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/StoreContainerStatus"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1.0/Container/{containerId}/hardwareInformation": {
+      "get": {
+        "tags": [
+          "Container"
+        ],
+        "operationId": "GetContainerHardwareInformation",
+        "parameters": [
+          {
+            "name": "containerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContainerHardwareInformationDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Container"
+        ],
+        "operationId": "StoreContainerHardwareInformation",
+        "parameters": [
+          {
+            "name": "containerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/StoreContainerHardwareInformation"
+                  }
+                ]
+              }
+            },
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/StoreContainerHardwareInformation"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/StoreContainerHardwareInformation"
+                  }
+                ]
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/StoreContainerHardwareInformation"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1.0/Container/{containerId}/notificationContacts/{statusMessage}": {
+      "get": {
+        "tags": [
+          "Container"
+        ],
+        "operationId": "GetNotificationContacts",
+        "parameters": [
+          {
+            "name": "containerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "statusMessage",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SkpNotificationContactDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1.0/Container/{containerId}/location": {
+      "delete": {
+        "tags": [
+          "Container"
+        ],
+        "operationId": "RemoveContainerFromAllLocations",
+        "parameters": [
+          {
+            "name": "containerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1.0/Container/{containerId}/currentWeight": {
+      "get": {
+        "tags": [
+          "Container"
+        ],
+        "operationId": "GetContainerCurrentWeight",
+        "parameters": [
+          {
+            "name": "containerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentWeightResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1.0/Location/{locationId}": {
+      "get": {
+        "tags": [
+          "Location"
+        ],
+        "operationId": "GetLocationById",
+        "parameters": [
+          {
+            "name": "locationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkpLocationDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1.0/Location/{locationId}/container": {
+      "post": {
+        "tags": [
+          "Location"
+        ],
+        "operationId": "UpdateLocationContainer",
+        "parameters": [
+          {
+            "name": "locationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateContainer"
+                  }
+                ]
+              }
+            },
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateContainer"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateContainer"
+                  }
+                ]
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/UpdateContainer"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success"
+          }
+        }
+      }
+    },
+    "/v1.0/Operator/{operatorId}": {
+      "get": {
+        "tags": [
+          "Operator"
+        ],
+        "operationId": "GetOperatorParams",
+        "parameters": [
+          {
+            "name": "operatorId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorParamsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1.0/Operator/{operatorId}/locations": {
+      "post": {
+        "tags": [
+          "Operator"
+        ],
+        "operationId": "GetLocationsForOperator",
+        "parameters": [
+          {
+            "name": "operatorId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/GetSkpLocations"
+                  }
+                ]
+              }
+            },
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/GetSkpLocations"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/GetSkpLocations"
+                  }
+                ]
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/GetSkpLocations"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SkpLocationDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1.0/Transaction/cardInfoByCustomerNumber": {
+      "post": {
+        "tags": [
+          "Transaction"
+        ],
+        "operationId": "GetCardInfoByCustomerNumber",
+        "parameters": [
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/HasCardAccessToLocationFractionByCustomerNumber"
+                  }
+                ]
+              }
+            },
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/HasCardAccessToLocationFractionByCustomerNumber"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/HasCardAccessToLocationFractionByCustomerNumber"
+                  }
+                ]
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/HasCardAccessToLocationFractionByCustomerNumber"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardInfoDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1.0/Transaction/cardInfoByCardUuid": {
+      "post": {
+        "tags": [
+          "Transaction"
+        ],
+        "operationId": "GetCardInfoByCardUuid",
+        "parameters": [
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/HasCardAccessToLocationFractionByCardUuid"
+                  }
+                ]
+              }
+            },
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/HasCardAccessToLocationFractionByCardUuid"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/HasCardAccessToLocationFractionByCardUuid"
+                  }
+                ]
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/HasCardAccessToLocationFractionByCardUuid"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardInfoDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1.0/Transaction/createInsertionByCustomerNumber": {
+      "post": {
+        "tags": [
+          "Transaction"
+        ],
+        "operationId": "CreateInsertionByCustomerNumber",
+        "parameters": [
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateInsertionTransactionByCustomerNumber"
+                  }
+                ]
+              }
+            },
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateInsertionTransactionByCustomerNumber"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateInsertionTransactionByCustomerNumber"
+                  }
+                ]
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateInsertionTransactionByCustomerNumber"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateInsertionResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1.0/Transaction/createInsertionByCardUuid": {
+      "post": {
+        "tags": [
+          "Transaction"
+        ],
+        "operationId": "CreateInsertionByCardUuid",
+        "parameters": [
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json-patch+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateInsertionTransactionByCardUuid"
+                  }
+                ]
+              }
+            },
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateInsertionTransactionByCardUuid"
+                  }
+                ]
+              }
+            },
+            "text/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateInsertionTransactionByCardUuid"
+                  }
+                ]
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateInsertionTransactionByCardUuid"
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateInsertionResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1.0/Translation/{translationKey}/{languageCode}": {
+      "get": {
+        "tags": [
+          "Translation"
+        ],
+        "operationId": "GetTranslation",
+        "parameters": [
+          {
+            "name": "translationKey",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "languageCode",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1.0/Translation/statusMessage/{statusMessageId}/{languageCode}": {
+      "get": {
+        "tags": [
+          "Translation"
+        ],
+        "operationId": "GetTranslationForStatusMessage",
+        "parameters": [
+          {
+            "name": "statusMessageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "languageCode",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          },
+          {
+            "name": "api-version",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "PreferredLocationFractionDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "locationId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "fractionId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "latitude": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        }
+      },
+      "ContainerParamsDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "lastLocation",
+          "preferredLocation",
+          "readPointer",
+          "writePointer"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "operatorId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "internalIdentNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "deviceNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "simCardNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "gsmNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "firmwareVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "retrofit": {
+            "type": "boolean"
+          },
+          "readPointer": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "writePointer": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "preferredLocation": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PreferredLocationFractionDto"
+              }
+            ]
+          },
+          "lastLocation": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PreferredLocationFractionDto"
+              }
+            ]
+          },
+          "isDisabledForSkp": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ContainerMachineSettingsDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "machineUtilization",
+          "numberOfPresses",
+          "percentFullMessage",
+          "percentPreFullMessage",
+          "pressPosition"
+        ],
+        "properties": {
+          "percentFullMessage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "percentPreFullMessage": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "numberOfPresses": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "machineUtilization": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pressPosition": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SkpContainerFeaturesDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "machineSettings": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContainerMachineSettingsDto"
+              }
+            ]
+          },
+          "singleValue": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "multipleValue": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "LastCommunicationResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "lastCommunication": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "UpdateLastCommunication": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "lastCommunication"
+        ],
+        "properties": {
+          "lastCommunication": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "UpdateReadWritePointer": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "readPointer",
+          "writePointer"
+        ],
+        "properties": {
+          "readPointer": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "writePointer": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "UpdateGeoPosition": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        }
+      },
+      "StatusMessageDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "shouldNotifyUser",
+          "storeInHistory",
+          "timestamp"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "fillState": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "shouldNotifyUser": {
+            "type": "boolean"
+          },
+          "storeInHistory": {
+            "type": "boolean"
+          }
+        }
+      },
+      "StoreContainerStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "simCardNumber"
+        ],
+        "properties": {
+          "locationId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "simCardNumber": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 0
+          },
+          "statusMessages": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/StatusMessageDto"
+            }
+          }
+        }
+      },
+      "FirmwareType": {
+        "type": "string",
+        "description": "\r\n\r\nPresscontrol\r\n\r\nEcoPress\r\n\r\nSsc\r\n\r\nThirdPartyProduct",
+        "x-enumNames": [
+          "Presscontrol",
+          "EcoPress",
+          "Ssc",
+          "ThirdPartyProduct"
+        ],
+        "enum": [
+          "Presscontrol",
+          "EcoPress",
+          "Ssc",
+          "ThirdPartyProduct"
+        ]
+      },
+      "ContainerHardwareInformationDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "firmwareType",
+          "gsmSignalStrength",
+          "numberOfStartings",
+          "operatingMinutes"
+        ],
+        "properties": {
+          "operatingMinutes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "numberOfStartings": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "gsmSignalStrength": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "dataConnection": {
+            "type": "string",
+            "nullable": true
+          },
+          "firmwareType": {
+            "description": "\r\n\r\nPresscontrol\r\n\r\nEcoPress\r\n\r\nSsc\r\n\r\nThirdPartyProduct",
+            "x-enumNames": [
+              "Presscontrol",
+              "EcoPress",
+              "Ssc",
+              "ThirdPartyProduct"
+            ],
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FirmwareType"
+              }
+            ]
+          },
+          "firmwareVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "targetFirmwareVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "targetFirmwareUpdateDate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "StoreContainerHardwareInformation": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "firmwareType",
+          "gsmSignalStrength",
+          "numberOfStartings",
+          "operatingMinutes",
+          "timestamp"
+        ],
+        "properties": {
+          "operatingMinutes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "numberOfStartings": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "gsmSignalStrength": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "dataConnection": {
+            "type": "string",
+            "nullable": true
+          },
+          "firmwareType": {
+            "description": "\r\n\r\nPresscontrol\r\n\r\nEcoPress\r\n\r\nSsc\r\n\r\nThirdPartyProduct",
+            "x-enumNames": [
+              "Presscontrol",
+              "EcoPress",
+              "Ssc",
+              "ThirdPartyProduct"
+            ],
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FirmwareType"
+              }
+            ]
+          },
+          "firmwareVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ContactMethod": {
+        "type": "string",
+        "description": "\r\n\r\nEmail\r\n\r\nSms\r\n\r\nEmailAndSms",
+        "x-enumNames": [
+          "Email",
+          "Sms",
+          "EmailAndSms"
+        ],
+        "enum": [
+          "Email",
+          "Sms",
+          "EmailAndSms"
+        ]
+      },
+      "SkpNotificationContactDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "contactMethod"
+        ],
+        "properties": {
+          "contact": {
+            "type": "string",
+            "nullable": true
+          },
+          "contactMethod": {
+            "description": "\r\n\r\nEmail\r\n\r\nSms\r\n\r\nEmailAndSms",
+            "x-enumNames": [
+              "Email",
+              "Sms",
+              "EmailAndSms"
+            ],
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContactMethod"
+              }
+            ]
+          }
+        }
+      },
+      "CurrentWeightResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "currentWeight": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        }
+      },
+      "LocationLanguageCodesDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "calculatedLanguageCode",
+          "languageCodes"
+        ],
+        "properties": {
+          "calculatedLanguageCode": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "languageCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SkpLocationDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "fractionId",
+          "fractionName",
+          "language",
+          "latitude",
+          "locationId",
+          "longitude",
+          "name",
+          "nightLockActive",
+          "nightLockStart",
+          "nightLockStop"
+        ],
+        "properties": {
+          "locationId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "name": {
+            "type": "string"
+          },
+          "fractionName": {
+            "type": "string"
+          },
+          "fractionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "latitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "nightLockActive": {
+            "type": "boolean"
+          },
+          "nightLockStart": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "nightLockStop": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "language": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LocationLanguageCodesDto"
+              }
+            ]
+          },
+          "pricePerOneHundredKilo": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "accessLimit": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "emptyingIsMaintained": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UpdateContainer": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "containerId"
+        ],
+        "properties": {
+          "containerId": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "TransactionOfflineMode": {
+        "type": "string",
+        "description": "\r\n\r\nAllow\r\n\r\nForbid",
+        "x-enumNames": [
+          "Allow",
+          "Forbid"
+        ],
+        "enum": [
+          "Allow",
+          "Forbid"
+        ]
+      },
+      "BalanceMode": {
+        "type": "string",
+        "description": "\r\n\r\nOnlineBalance\r\n\r\nOfflineBalance\r\n\r\nExternalBalance",
+        "x-enumNames": [
+          "OnlineBalance",
+          "OfflineBalance",
+          "ExternalBalance"
+        ],
+        "enum": [
+          "OnlineBalance",
+          "OfflineBalance",
+          "ExternalBalance"
+        ]
+      },
+      "OperatorParamsDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "balanceMode",
+          "currencyId",
+          "operatorId",
+          "transactionOfflineMode"
+        ],
+        "properties": {
+          "operatorId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "operatorName": {
+            "type": "string",
+            "nullable": true
+          },
+          "currencyId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "languageCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "timezoneId": {
+            "type": "string",
+            "nullable": true
+          },
+          "transactionOfflineMode": {
+            "description": "\r\n\r\nAllow\r\n\r\nForbid",
+            "x-enumNames": [
+              "Allow",
+              "Forbid"
+            ],
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TransactionOfflineMode"
+              }
+            ]
+          },
+          "balanceMode": {
+            "description": "\r\n\r\nOnlineBalance\r\n\r\nOfflineBalance\r\n\r\nExternalBalance",
+            "x-enumNames": [
+              "OnlineBalance",
+              "OfflineBalance",
+              "ExternalBalance"
+            ],
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BalanceMode"
+              }
+            ]
+          }
+        }
+      },
+      "GetSkpLocations": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "maxLatitude",
+          "maxLongitude",
+          "minLatitude",
+          "minLongitude"
+        ],
+        "properties": {
+          "minLatitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxLatitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "minLongitude": {
+            "type": "number",
+            "format": "double"
+          },
+          "maxLongitude": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "HasCardAccessToLocationFractionByCustomerNumber": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "customerNumber",
+          "locationId",
+          "operatorId"
+        ],
+        "properties": {
+          "customerNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "operatorId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "locationId": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "CardAccessResult": {
+        "type": "string",
+        "description": "\r\n\r\nOk\r\n\r\nCardValidButCustomerHasNoAccess\r\n\r\nCustomerHasNotEnoughBalance\r\n\r\nCardNotFound\r\n\r\nCardIsLocked",
+        "x-enumNames": [
+          "Ok",
+          "CardValidButCustomerHasNoAccess",
+          "CustomerHasNotEnoughBalance",
+          "CardNotFound",
+          "CardIsLocked"
+        ],
+        "enum": [
+          "Ok",
+          "CardValidButCustomerHasNoAccess",
+          "CustomerHasNotEnoughBalance",
+          "CardNotFound",
+          "CardIsLocked"
+        ]
+      },
+      "CardInfoDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "languageId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "cardAccess": {
+            "description": "\r\n\r\nOk\r\n\r\nCardValidButCustomerHasNoAccess\r\n\r\nCustomerHasNotEnoughBalance\r\n\r\nCardNotFound\r\n\r\nCardIsLocked",
+            "x-enumNames": [
+              "Ok",
+              "CardValidButCustomerHasNoAccess",
+              "CustomerHasNotEnoughBalance",
+              "CardNotFound",
+              "CardIsLocked"
+            ],
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CardAccessResult"
+              }
+            ]
+          },
+          "currentBalance": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        }
+      },
+      "HasCardAccessToLocationFractionByCardUuid": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "cardUuid",
+          "locationId",
+          "operatorId"
+        ],
+        "properties": {
+          "cardUuid": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 0
+          },
+          "operatorId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "locationId": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "CreateInsertionTransactionByCustomerNumber": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "containerId",
+          "customerNumber",
+          "locationId",
+          "operatorId",
+          "statusMessageCode",
+          "timestamp"
+        ],
+        "properties": {
+          "customerNumber": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cardUuid": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 0,
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "operatorId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "containerId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "locationId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "statusMessageCode": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "weightInKilo": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "durationInSeconds": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "alibiStorageNumber": {
+            "type": "string",
+            "maxLength": 15,
+            "minLength": 0,
+            "nullable": true
+          },
+          "currentBalance": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        }
+      },
+      "CreateInsertionResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "chargedAmount": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "newCurrentBalance": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        }
+      },
+      "CreateInsertionTransactionByCardUuid": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "cardUuid",
+          "containerId",
+          "locationId",
+          "operatorId",
+          "statusMessageCode",
+          "timestamp"
+        ],
+        "properties": {
+          "cardUuid": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 0
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "operatorId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "containerId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "locationId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "statusMessageCode": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "weightInKilo": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "durationInSeconds": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "alibiStorageNumber": {
+            "type": "string",
+            "maxLength": 15,
+            "minLength": 0,
+            "nullable": true
+          },
+          "currentBalance": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        }
+      }
+    }
+  }
+}
