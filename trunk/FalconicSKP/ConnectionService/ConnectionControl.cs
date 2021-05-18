@@ -3043,6 +3043,7 @@ namespace ConnectionService
                         LogFile.WriteMessageToLogFile("{0} Get locations for this geopos", this.Name);
 
                         GetSkpLocations getLoc = new GetSkpLocations(lat + 0.0030F, lng + 0.0030F, lat - 0.0030F, lng - 0.0030F);
+
                         foreach (var location in ConnectionControl.SkpApiClient.GetLocationsForOperator(_container.OperatorId, getLoc))
                         {
                             Location loc = new Location();
@@ -3054,12 +3055,25 @@ namespace ConnectionService
 
                             loc.Latitude = (double)location.Latitude;
                             loc.Longitude = (double)location.Longitude;
-//                            loc.IsWatchdogActive = (bool)location.LocationMonitoringActive;
-                            loc.PressStrokes = (int)contFeatures.MachineSettings.NumberOfPresses;
-                            loc.PressPosition = (bool)contFeatures.MachineSettings.PressPosition;
-                            loc.MachineUtilization = (int)contFeatures.MachineSettings.MachineUtilization;
-                            loc.FullErrorLevel = (int)contFeatures.MachineSettings.PercentFullMessage;
-                            loc.FullWarningLevel = (int)contFeatures.MachineSettings.PercentPreFullMessage;
+                            //                            loc.IsWatchdogActive = (bool)location.LocationMonitoringActive;
+                            if (contFeatures.MachineSettings != null)
+                            {
+                                loc.PressStrokes = (int)contFeatures.MachineSettings.NumberOfPresses;
+                                loc.PressPosition = (bool)contFeatures.MachineSettings.PressPosition;
+                                loc.MachineUtilization = (int)contFeatures.MachineSettings.MachineUtilization;
+                                loc.FullErrorLevel = (int)contFeatures.MachineSettings.PercentFullMessage;
+                                loc.FullWarningLevel = (int)contFeatures.MachineSettings.PercentPreFullMessage;
+                            }
+                            else
+                            {
+                                LogFile.WriteErrorToLogFile("{0} MachineSettings == null -> use default settings", this.Name);
+                                loc.PressStrokes = 3;
+                                loc.PressPosition = false;
+                                loc.MachineUtilization = 100;
+                                loc.FullErrorLevel = 95;
+                                loc.FullWarningLevel = 75;
+                            }
+
                             loc.PreferredFractionId = location.FractionId;
 
                             if (location.NightLockActive)
